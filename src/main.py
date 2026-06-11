@@ -24,11 +24,15 @@ except ImportError:
 # Ensure project root is in sys.path so imports work consistently
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import yaml
+
 from src.analyzer import TenderExtractor, TenderParser, RiskScorer, ReportGenerator
 from src.lawyer import VirtualLawyer, EvidenceChecklist
 from src.shared.llm import LLMClient
 from src.shared.jurisdiction import JurisdictionLoader
 from src.shared.chunker import DocumentChunker, DocumentChunk
+from src.shared.chunking import chunk_constitution
+from src.shared.chroma_store import ChromaLegalStore
 
 
 def get_llm(provider: str | None = None,
@@ -157,6 +161,7 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
     """Launch the Gradio UI."""
     try:
         import gradio as gr
+        import gradio.themes as grt
     except ImportError:
         print("Gradio not installed. Run: pip install gradio")
         sys.exit(1)
@@ -169,6 +174,23 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
     reporter = ReportGenerator()
     lawyer = VirtualLawyer(loader, llm) if llm else VirtualLawyer(loader)
     chunker = DocumentChunker()
+
+    # Initialize ChromaDB with Constitution of Nepal
+    chroma_store = ChromaLegalStore(
+        persist_dir=str(Path.home() / ".justice_chromadb")
+    )
+    constitution_path = Path(__file__).resolve().parent.parent / "docs" / "legal" / "np_constitution.yaml"
+    if constitution_path.exists():
+        try:
+            with open(constitution_path) as f:
+                constitution_data = yaml.safe_load(f)
+            if constitution_data and "parts" in constitution_data:
+                count = chroma_store.index_constitution(constitution_data)
+                print(f"   ⚖️ Constitution indexed: {count} clauses")
+        except Exception as e:
+            print(f"   ⚠️ Constitution indexing skipped: {e}")
+    else:
+        print("   ℹ️ Constitution file not found at {constitution_path}")
 
     # UI state
     tender_cache = {}
@@ -207,9 +229,20 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
             return f"Error: {e}", ""
 
     def counsel_question(question):
-        """Answer a legal question."""
+        """Answer a legal question — grounded in constitution law via ChromaDB."""
         if not question.strip():
             return "Ask a question about the tender's legal implications."
+
+        # Search the Constitution via ChromaDB
+        constitution_context = ""
+        try:
+            if chroma_store.count() > 0:
+                search_results = chroma_store.search(question, top_k=4)
+                if search_results:
+                    constitution_context = chroma_store.get_search_context(search_results)
+        except Exception:
+            pass
+
         if "report" not in tender_cache:
             return "Please analyze a tender first."
 
@@ -236,19 +269,17 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
             risk_report=report,
         )
 
-        response = lawyer.counsel(request)
+        # Pass constitution context to the lawyer
+        response = lawyer.counsel(request, constitution_context=constitution_context)
 
-        result = response.answer
-        if response.citations:
-            result += "\n\n📚 Citations:\n" + "\n".join(
-                f"• {c.source}: {c.description[:100]}" for c in response.citations
-            )
-        if response.suggested_actions:
-            result += "\n\n📋 Suggested Actions:\n" + "\n".join(
-                f"• {a}" for a in response.suggested_actions
-            )
-        result += f"\n\n{response.disclaimer}"
-        return result
+        # Return just the clean answer — no formal sections for non-tech users
+        answer = response.answer.strip()
+
+        # Only add a brief disclaimer in a footer
+        if response.disclaimer:
+            answer += f"\n\n—\n{response.disclaimer[:200]}"
+
+        return answer
 
     # Build UI
     mascot_html_path = Path(__file__).resolve().parent / "ui" / "mascot.html"
@@ -257,7 +288,7 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
         with open(mascot_html_path) as f:
             mascot_html = f.read()
 
-    with gr.Blocks(title="OpenTender + Counsel", theme=gr.themes.Soft()) as ui:
+    with gr.Blocks(title="OpenTender + Counsel") as ui:
         gr.Markdown("# 🛡️ OpenTender + Counsel")
         gr.Markdown("Upload a government tender document — get a corruption risk report *and* chat with a Digital Lawyer about legal next steps.")
 
@@ -284,36 +315,66 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
                     mascot_status = gr.Markdown("**Status:** Ready")
                 with gr.Column(scale=2):
                     gr.Markdown("Ask the Digital Lawyer about legal next steps for your tender.")
-                    question_input = gr.Textbox(
-                        label="Your Question",
-                        placeholder="e.g., Is it illegal to have only 3 days for bids? How do I report this? Draft a complaint to CIAA.",
-                        lines=4,
+                    chatbot = gr.Chatbot(
+                        label="Conversation",
+                        height=420,
                     )
-                    ask_btn = gr.Button("💬 Ask", variant="primary", size="lg")
-                    evidence_checkbox = gr.Checkbox(label="I have preserved copies of evidence", value=False)
-                    answer_output = gr.Markdown(label="Response")
+                    with gr.Row():
+                        question_input = gr.Textbox(
+                            label="Your Question",
+                            placeholder="Type your question here and press Enter or click Ask...",
+                            lines=2,
+                            scale=4,
+                        )
+                        ask_btn = gr.Button("💬 Ask", variant="primary", size="lg", scale=1)
+                    chat_history = gr.State([])
 
                     def update_mascot_status(question):
                         if not question.strip():
                             return "**Status:** Ready", None
                         return "**Status:** ⚖️ Thinking… analyzing legal framework", None
 
-                    def finalize_status(question, has_evidence):
+                    def respond_and_record(question, history):
+                        if not question.strip():
+                            return history, history, "**Status:** Ready"
+
                         answer = counsel_question(question)
-                        if not answer or "error" in answer.lower() or "please" in answer.lower():
+
+                        if not answer or len(answer) < 10 or "error" in answer.lower():
                             status = "**Status:** Ready to help"
                         else:
                             status = "**Status:** ⚖️ Speaking — providing legal analysis"
-                        return answer, status
+
+                        history.append((question, answer))
+                        return history, history, status
 
                     ask_btn.click(
                         fn=update_mascot_status,
                         inputs=[question_input],
                         outputs=[mascot_status, gr.State()],
                     ).then(
-                        fn=finalize_status,
-                        inputs=[question_input, evidence_checkbox],
-                        outputs=[answer_output, mascot_status],
+                        fn=respond_and_record,
+                        inputs=[question_input, chat_history],
+                        outputs=[chat_history, chatbot, mascot_status],
+                    ).then(
+                        fn=lambda: "",
+                        inputs=None,
+                        outputs=[question_input],
+                    )
+
+                    # Also submit on Enter
+                    question_input.submit(
+                        fn=update_mascot_status,
+                        inputs=[question_input],
+                        outputs=[mascot_status, gr.State()],
+                    ).then(
+                        fn=respond_and_record,
+                        inputs=[question_input, chat_history],
+                        outputs=[chat_history, chatbot, mascot_status],
+                    ).then(
+                        fn=lambda: "",
+                        inputs=None,
+                        outputs=[question_input],
                     )
 
         with gr.Tab("📋 Evidence Checklist"):
@@ -351,7 +412,7 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
             "It does not constitute legal advice. Consult a qualified attorney for legal action."
         )
 
-    ui.launch(server_name="127.0.0.1", server_port=7860)
+    ui.launch(server_name="127.0.0.1", server_port=7860, theme=grt.Soft())
 
 
 def main():
