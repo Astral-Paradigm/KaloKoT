@@ -1,0 +1,145 @@
+================================================================================
+GOVERNMENT OF NEPAL
+MINISTRY OF EDUCATION, SCIENCE AND TECHNOLOGY
+DEPARTMENT OF EDUCATION
+================================================================================
+
+NOTICE OF EMERGENCY PROCUREMENT
+(Under Section 56 of the Public Procurement Act 2063)
+Ref.: DoE/EM/SF/2082-83/042
+Date: 2082-03-28 (2025-07-11)
+
+Project: Supply and delivery of classroom furniture for 120 community schools
+         in Province 2 (Parsa, Bara, Rautahat districts)
+Estimated Total Value: NPR 185,000,000.00
+Submission Deadline: 2082-04-02 (2025-07-16) — 5 days from notice
+
+================================================================================
+JUSTIFICATION FOR EMERGENCY PROCUREMENT
+================================================================================
+
+Pursuant to Section 56 of the Public Procurement Act 2063, emergency
+procurement is invoked on the following grounds:
+
+"The start of the academic session 2082 is delayed due to furniture
+shortage in 120 community schools. Regular procurement would cause
+further delay of 4-5 months, disrupting the education of approximately
+35,000 students. Immediate procurement is essential to prevent academic
+loss."
+
+================================================================================
+SECTION 1: SCOPE OF SUPPLY
+================================================================================
+
+1.1 Two-seater student desks (wooden): 12,000 units
+1.2 Teacher tables (wooden): 240 units
+1.3 Teacher chairs (wooden): 240 units
+1.4 Whiteboards (6'x4'): 240 units
+1.5 Notice boards (4'x3'): 120 units
+
+Total schools: 120 (see Annex A for school list)
+Delivery timeline: All items to be delivered within 30 days of contract signing
+
+================================================================================
+SECTION 2: TECHNICAL SPECIFICATIONS
+================================================================================
+
+2.1 Student desk: 120cm x 45cm x 76cm, Sal wood (Shorea robusta),
+    finished with melamine coating. Must conform to Nepal Standard
+    NS 487:2078.
+2.2 Teacher table: 150cm x 75cm x 76cm, Sal wood.
+2.3 Teacher chair: Standard office chair, Sal wood, cushioned seat.
+
+Note: Sal wood furniture manufactured by Janakpur Woodcraft Industries
+(P.) Ltd. is pre-approved as meeting these specifications. Equivalent
+products from other manufacturers will require pre-qualification testing
+overseen by the Department's Quality Assurance Section.
+
+================================================================================
+SECTION 3: QUALIFICATION REQUIREMENTS
+================================================================================
+
+3.1 Registered with Government of Nepal (Company Registrar)
+3.2 Manufacturing facility capable of producing minimum 500 desks per day
+3.3 Minimum 3 years experience in school furniture supply
+3.4 Minimum 2 contracts of NPR 40 million each in the last 3 years
+
+================================================================================
+SECTION 4: EVALUATION
+================================================================================
+
+Due to the emergency nature of this procurement, evaluation will follow
+the following simplified procedure:
+
+4.1 Submission of sealed quotation (technical + financial)
+4.2 Technical evaluation on pass/fail basis
+4.3 Financial evaluation: lowest price among technically qualified bidders
+4.4 No weight-based QCBS evaluation
+4.5 Negotiation allowed with lowest bidder
+
+================================================================================
+SECTION 5: BUDGET BREAKDOWN (ESTIMATED)
+================================================================================
+
+| Item | Quantity | Unit Rate (NPR) | Total (NPR) |
+|------|----------|----------------|-------------|
+| Student desks | 12,000 | 8,500 | 102,000,000 |
+| Teacher tables | 240 | 15,000 | 3,600,000 |
+| Teacher chairs | 240 | 12,000 | 2,880,000 |
+| Whiteboards | 240 | 18,000 | 4,320,000 |
+| Notice boards | 120 | 4,500 | 540,000 |
+| Transportation | lump sum | 12,000,000 | 12,000,000 |
+| Contingency | 5% | various | 6,317,000 |
+| **Total** | | | **131,657,000** |
+
+Note: The estimated value is declared as NPR 185,000,000 but the detailed
+cost estimate above totals only NPR 131,657,000. The discrepancy of
+approximately NPR 53,343,000 is not explained in the procurement notice.
+
+================================================================================
+SECTION 6: TIMELINE
+================================================================================
+
+| Activity | Date |
+|----------|------|
+| Emergency notice | 2082-03-28 |
+| Submission deadline | 2082-04-02 (5 days) |
+| Evaluation | 2082-04-03 |
+| Contract signing | 2082-04-05 |
+| Delivery | 2082-05-05 |
+
+================================================================================
+SECTION 7: RELATED PROCUREMENTS
+================================================================================
+
+The following related procurements issued by DoE in the same fiscal year:
+
+| IFB No. | Date | Item | Value (NPR) |
+|---------|------|------|-------------|
+| DoE/CP/SF/2082-83/018 | 2082-01-10 | Desks for Province 1 | 42,000,000 |
+| DoE/CP/SF/2082-83/019 | 2082-01-10 | Desks for Madhesh | 38,000,000 |
+| DoE/CP/SF/2082-83/020 | 2082-01-10 | Desks for Bagmati | 45,000,000 |
+| DoE/CP/SF/2082-83/021 | 2082-01-10 | Desks for Gandaki | 35,000,000 |
+| **Total related** | | | **160,000,000** |
+
+Note: These 4 contracts were awarded through national competitive bidding
+and totalled NPR 160,000,000 for 4 provinces. The current emergency
+procurement for Province 2 (NPR 185,000,000) covers only 3 districts
+but exceeds the total of any of the other 4-province contracts.
+
+================================================================================
+SECTION 8: NOTES (NOT PART OF NOTICE)
+================================================================================
+
+- Emergency procurement used for furniture (non-perishable, routine goods)
+- 5-day submission period is well below the standard minimum of 25 days
+- Budget discrepancy: NPR 185M advertised vs NPR 131M detailed breakdown
+- Total desk procurement for all 7 provinces this year: NPR 345,000,000
+  (the single-supplier threshold for international bidding is NPR 50M,
+  suggesting possible contract splitting)
+- Pre-approved specification for Janakpur Woodcraft Industries suggests
+  single-bidder tailoring
+
+================================================================================
+END OF EMERGENCY PROCUREMENT NOTICE
+================================================================================
