@@ -113,3 +113,26 @@ class ComplaintDraft(BaseModel):
     body: str
     template_name: str
     instructions: str = ""
+
+
+class VendorAssessment(BaseModel):
+    """Vendor/contractor risk assessment result."""
+    vendor_name: str
+    overall_risk: RiskLevel
+    flags: list = Field(default_factory=list)
+    registration_age_days: Optional[int] = None
+    pep_signal: bool = False
+
+
+class RiskAssessmentResult(BaseModel):
+    """Whistleblower personal risk assessment outcome."""
+    jurisdiction: str
+    overall_risk: str
+    summary: str
+    anonymity: dict = Field(default_factory=dict)
+    witness_protection: dict = Field(default_factory=dict)
+    legal_protections: list = Field(default_factory=list)
+    recommended_channels: list = Field(default_factory=list)
+    retaliation_indicators: list = Field(default_factory=list)
+    precaution_steps: list = Field(default_factory=list)
+    critical_warning: Optional[str] = None

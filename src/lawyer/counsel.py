@@ -12,6 +12,8 @@ from ..shared.jurisdiction import JurisdictionLoader
 from .jurisprudence import LegalQueryEngine
 from .disclaimers import get_disclaimer
 from .drafting import DraftGenerator
+from .evidence import EvidenceChecklist
+from .risk_assessment import WhistleblowerRiskAssessment
 
 
 COUNSEL_SYSTEM_PROMPT = """You are a Virtual Lawyer specializing in government procurement law and anti-corruption. 
@@ -49,6 +51,8 @@ class VirtualLawyer:
         self.llm = llm
         self.query_engine = LegalQueryEngine(loader)
         self.draft_generator = DraftGenerator(loader, llm)
+        self.evidence = EvidenceChecklist()
+        self.risk = WhistleblowerRiskAssessment()
 
     def counsel(self, request: CounselRequest) -> CounselResponse:
         """Process a counsel request and return a response."""

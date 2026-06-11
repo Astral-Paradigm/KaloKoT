@@ -81,6 +81,10 @@ class JurisdictionLoader:
                 matched.append(flag)
         return matched
 
+    def load_yaml(self, jurisdiction: JurisdictionCode) -> dict:
+        """Return the full parsed YAML data for a jurisdiction (public wrapper)."""
+        return self._load(jurisdiction.value)
+
     def build_legal_context(self, jurisdiction: JurisdictionCode,
                             flagged_ids: Optional[List[str]] = None) -> str:
         """Build a legal context summary string for LLM prompts.

@@ -35,15 +35,17 @@ try:
 except ImportError:
     pass
 
-from src.analyzer import TenderExtractor, RiskScorer, ReportGenerator
+from src.analyzer import TenderExtractor, RiskScorer, ReportGenerator, VendorIntelligence, VendorProfile
 from src.lawyer import VirtualLawyer, EvidenceChecklist
 from src.lawyer.drafting import DraftGenerator
+from src.lawyer.risk_assessment import WhistleblowerRiskAssessment
 from src.shared.jurisdiction import JurisdictionLoader
 from src.shared.llm import LLMClient
 from src.shared.models import (
     ComplaintDraft, CounselRequest, CounselResponse,
     JurisdictionCode, RiskReport, TenderDocument,
 )
+from src.shared.vector_search import LegalVectorSearch
 
 # ── Application Setup ─────────────────────────────────────────────────────────
 
@@ -127,6 +129,24 @@ def _get_checklist() -> EvidenceChecklist:
     return _instances["checklist"]
 
 
+def _get_vendor_intel() -> VendorIntelligence:
+    if "vendor_intel" not in _instances:
+        _instances["vendor_intel"] = VendorIntelligence()
+    return _instances["vendor_intel"]
+
+
+def _get_risk_assessment() -> WhistleblowerRiskAssessment:
+    if "risk_assessment" not in _instances:
+        _instances["risk_assessment"] = WhistleblowerRiskAssessment()
+    return _instances["risk_assessment"]
+
+
+def _get_legal_search() -> LegalVectorSearch:
+    if "legal_search" not in _instances:
+        _instances["legal_search"] = LegalVectorSearch()
+    return _instances["legal_search"]
+
+
 # ── Helper: Build TenderDocument with optional jurisdiction hint ──────────────
 
 
@@ -156,6 +176,9 @@ async def root():
             "POST /counsel": "Ask the Virtual Lawyer a question",
             "POST /checklist": "Generate evidence preservation checklist",
             "POST /export-draft": "Export a complaint draft as .txt",
+            "POST /vendor-intel": "Assess vendor/contractor risk (shell, PEP, registration)",
+            "POST /risk-assessment": "Whistleblower personal risk assessment",
+            "POST /legal-search": "Semantic search over legal knowledge base",
             "GET /jurisdictions": "List available legal jurisdictions",
             "GET /health": "Health check",
         },
@@ -363,6 +386,85 @@ async def export_draft(
         media_type="text/plain",
         headers={"Content-Disposition": f'attachment; filename="{title.replace(" ", "_")}.txt"'},
     )
+
+
+@app.post("/vendor-intel", summary="Assess vendor/contractor risk")
+async def vendor_intelligence(
+    vendor_name: str = Form(...),
+    registration_number: Optional[str] = Form(None),
+    registration_date: Optional[str] = Form(None),
+    directors: Optional[str] = Form(None),
+    address: Optional[str] = Form(None),
+):
+    """Assess a vendor/contractor for shell company indicators, PEP connections, and registration risk."""
+    profile = VendorProfile(
+        name=vendor_name,
+        registration_number=registration_number,
+        registration_date=registration_date,
+        directors=[d.strip() for d in directors.split(",")] if directors else [],
+        address=address,
+    )
+    intel = _get_vendor_intel()
+    overall, flags = intel.assess(profile)
+    return {
+        "vendor_name": vendor_name,
+        "overall_risk": overall.value,
+        "flags": [f.to_dict() for f in flags],
+        "flag_count": len(flags),
+    }
+
+
+@app.post("/risk-assessment", summary="Whistleblower personal risk assessment")
+async def whistleblower_risk(
+    jurisdiction: str = Form(...),
+    is_government_employee: bool = Form(False),
+    has_evidence_copies: bool = Form(False),
+):
+    """Assess personal risk if you blow the whistle on procurement corruption.
+
+    Provides jurisdiction-specific retaliation likelihood, anonymity options,
+    witness protection availability, and precaution steps.
+    """
+    jcode = JurisdictionCode.UNKNOWN
+    for code in JurisdictionCode:
+        if code.value == jurisdiction.lower():
+            jcode = code
+            break
+    assessor = _get_risk_assessment()
+    result = assessor.assess(jcode, is_government_employee, has_evidence_copies)
+    return result
+
+
+@app.post("/legal-search", summary="Semantic search over legal knowledge base")
+async def legal_search(
+    query: str = Form(...),
+    jurisdiction: str = Form("np"),
+    top_k: int = Form(5),
+    threshold: float = Form(0.0),
+):
+    """Search the legal knowledge base using semantic similarity.
+
+    Finds relevant red flag definitions, legal provisions, templates, and
+    oversight body information matching your query.
+    """
+    loader = _get_loader()
+    searcher = _get_legal_search()
+
+    jcode = JurisdictionCode.UNKNOWN
+    for code in JurisdictionCode:
+        if code.value == jurisdiction.lower():
+            jcode = code
+            break
+
+    # Load YAML data and index
+    try:
+        yaml_data = loader.load_yaml(jcode)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Jurisdiction '{jurisdiction}' not found")
+
+    searcher.index_jurisdiction(yaml_data)
+    results = searcher.hybrid_search(query, top_k=top_k, threshold=threshold)
+    return {"query": query, "jurisdiction": jurisdiction, "results": results}
 
 
 # ── CLI Entry Point ───────────────────────────────────────────────────────────
