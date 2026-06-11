@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Digital Lawyer — Mascot</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: transparent;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+  }
+  .mascot-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  canvas {
+    display: block;
+    width: 300px;
+    height: 340px;
+  }
+  .speech-bubble {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    border-radius: 16px;
+    padding: 12px 18px;
+    max-width: 280px;
+    font-size: 13px;
+    line-height: 1.5;
+    position: relative;
+    min-height: 40px;
+    border: 1px solid #333355;
+    transition: opacity 0.3s ease;
+    text-align: center;
+  }
+  .speech-bubble::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid #1a1a2e;
+  }
+  .status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+  .status-dot.idle { background: #4ade80; }
+  .status-dot.listening { background: #60a5fa; }
+  .status-dot.thinking { background: #fbbf24; }
+  .status-dot.speaking { background: #f472b6; }
+  .status-dot.analyzing { background: #a78bfa; }
+</style>
+</head>
+<body>
+<div class="mascot-container">
+  <canvas id="mascotCanvas" width="600" height="680"></canvas>
+  <div class="speech-bubble" id="speechBubble">
+    <span class="status-dot idle" id="statusDot"></span>
+    <span id="bubbleText">Ready to assist with your legal inquiry.</span>
+  </div>
+</div>
+
+<script>
+class DigitalLawyerMascot {
+  constructor(canvasId) {
+    this.canvas = document.getElementById(canvasId);
+    this.ctx = this.canvas.getContext('2d');
+    this.w = this.canvas.width;
+    this.h = this.canvas.height;
+
+    // Animation state
+    this.state = 'idle'; // idle | thinking | speaking | analyzing
+    this.time = 0;
+    this.gesturePhase = 0;
+    this.gestureDirection = 1;
+
+    // Colors
+    this.suitColor = '#1a1a2e';
+    this.suitLapel = '#222244';
+    this.shirtColor = '#f0f0f0';
+    this.tieColor = '#881337';
+    this.skinTone = '#2d2d44';
+    this.skinShadow = '#1f1f33';
+    this.highlightColor = '#3b3b66';
+
+    this._setupCanvas();
+    this._animate();
+  }
+
+  _setupCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const displayWidth = 300;
+    const displayHeight = 340;
+    this.canvas.style.width = displayWidth + 'px';
+    this.canvas.style.height = displayHeight + 'px';
+    this.canvas.width = displayWidth * dpr;
+    this.canvas.height = displayHeight * dpr;
+    this.ctx.scale(dpr, dpr);
+    this.w = displayWidth;
+    this.h = displayHeight;
+  }
+
+  setState(newState, speechText) {
+    this.state = newState;
+    this.gesturePhase = 0;
+    const dot = document.getElementById('statusDot');
+    dot.className = 'status-dot ' + newState;
+    const bubble = document.getElementById('bubbleText');
+    if (speechText) bubble.textContent = speechText;
+  }
+
+  setSpeech(text) {
+    document.getElementById('bubbleText').textContent = text;
+  }
+
+  // ── Draw Figure ──────────────────────────────────────────────
+  _drawBackground() {
+    const ctx = this.ctx;
+    const w = this.w, h = this.h;
+
+    // Dark vignette background
+    const grad = ctx.createRadialGradient(w/2, h/2, 40, w/2, h/2, w*0.7);
+    grad.addColorStop(0, 'rgba(30, 30, 60, 0.3)');
+    grad.addColorStop(1, 'rgba(10, 10, 20, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Subtle floor shadow
+    ctx.beginPath();
+    ctx.ellipse(w/2, h - 20, 90, 14, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+    ctx.fill();
+  }
+
+  _drawBody() {
+    const ctx = this.ctx;
+    const w = this.w;
+    const breathOffset = this.state === 'idle' ? Math.sin(this.time * 0.03) * 1.5 : 0;
+    const baseY = this.h * 0.52 + breathOffset;
+
+    // Torso (suit jacket)
+    ctx.save();
+    const torsoW = 80;
+    const torsoH = 120;
+    const torsoX = (w - torsoW) / 2;
+    const torsoY = baseY - 10;
+
+    // Jacket body
+    ctx.beginPath();
+    ctx.moveTo(torsoX, torsoY + 20);
+    ctx.quadraticCurveTo(torsoX - 8, torsoY + 10, torsoX + 5, torsoY);
+    ctx.lineTo(torsoX + 30, torsoY + 18);
+    ctx.lineTo(torsoX + torsoW - 30, torsoY + 18);
+    ctx.lineTo(torsoX + torsoW - 5, torsoY);
+    ctx.quadraticCurveTo(torsoX + torsoW + 8, torsoY + 10, torsoX + torsoW, torsoY + 20);
+    ctx.lineTo(torsoX + torsoW + 2, torsoY + torsoH);
+    ctx.lineTo(torsoX - 2, torsoY + torsoH);
+    ctx.closePath();
+    ctx.fillStyle = this.suitColor;
+    ctx.fill();
+    ctx.strokeStyle = this.suitLapel;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Lapels (V-neck)
+    ctx.beginPath();
+    ctx.moveTo(torsoX + 40, torsoY + 10);
+    ctx.lineTo(torsoX + 55, torsoY + 60);
+    ctx.lineTo(torsoX + 40, torsoY + 65);
+    ctx.fillStyle = this.suitLapel;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(torsoX + torsoW - 40, torsoY + 10);
+    ctx.lineTo(torsoX + torsoW - 55, torsoY + 60);
+    ctx.lineTo(torsoX + torsoW - 40, torsoY + 65);
+    ctx.fillStyle = this.suitLapel;
+    ctx.fill();
+
+    // Shirt V
+    ctx.beginPath();
+    ctx.moveTo(torsoX + 40, torsoY + 10);
+    ctx.lineTo(torsoX + 55, torsoY + 30);
+    ctx.lineTo(torsoX + torsoW - 55, torsoY + 30);
+    ctx.lineTo(torsoX + torsoW - 40, torsoY + 10);
+    ctx.closePath();
+    ctx.fillStyle = this.shirtColor;
+    ctx.fill();
+
+    // Tie
+    ctx.beginPath();
+    ctx.moveTo(torsoX + 40, torsoY + 25);
+    ctx.quadraticCurveTo(torsoX + 37, torsoY + 55, torsoX + 42, torsoY + 85);
+    ctx.lineTo(torsoX + 58, torsoY + 85);
+    ctx.quadraticCurveTo(torsoX + 63, torsoY + 55, torsoX + 60, torsoY + 25);
+    ctx.closePath();
+    ctx.fillStyle = this.tieColor;
+    ctx.fill();
+
+    // Jacket bottom line
+    ctx.beginPath();
+    ctx.moveTo(torsoX, torsoY + torsoH - 5);
+    ctx.lineTo(torsoX + torsoW, torsoY + torsoH - 5);
+    ctx.strokeStyle = this.suitLapel;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  _drawHead(gestureArmOffset) {
+    const ctx = this.ctx;
+    const w = this.w;
+    const breathOffset = this.state === 'idle' ? Math.sin(this.time * 0.03) * 0.8 : 0;
+    const baseY = this.h * 0.52 + breathOffset;
+
+    // Head position
+    const headX = w / 2;
+    const headY = baseY - 50;
+    const headR = 28;
+
+    // Neck
+    ctx.beginPath();
+    ctx.moveTo(headX - 10, headY + headR - 2);
+    ctx.lineTo(headX - 12, headY + headR + 14);
+    ctx.lineTo(headX + 12, headY + headR + 14);
+    ctx.lineTo(headX + 10, headY + headR - 2);
+    ctx.closePath();
+    ctx.fillStyle = this.skinTone;
+    ctx.fill();
+
+    // Head silhouette - oval with no facial features
+    ctx.beginPath();
+    ctx.ellipse(headX, headY, headR, headR + 4, 0, 0, Math.PI * 2);
+    ctx.fillStyle = this.skinShadow;
+    ctx.fill();
+
+    // Head highlight (top edge)
+    ctx.beginPath();
+    ctx.ellipse(headX - 4, headY - 8, 12, 10, -0.1, 0, Math.PI);
+    ctx.fillStyle = this.highlightColor;
+    ctx.fill();
+
+    // Abstract face suggestion — just enough to say "this is a face" without features
+    // Subtle jawline shadow
+    ctx.beginPath();
+    ctx.arc(headX + 6, headY + 6, 14, -1.2, 0.8);
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Abstract glasses suggestion (just thin wireframe, no eyes)
+    ctx.beginPath();
+    ctx.arc(headX - 6, headY - 2, 10, -0.3, Math.PI + 0.3, false);
+    ctx.arc(headX + 6, headY - 2, 10, Math.PI - 0.3, -Math.PI + 0.3, false);
+    ctx.moveTo(headX - 6 + 10, headY - 2);
+    ctx.lineTo(headX + 6 - 10, headY - 2);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // Hair suggestion (top silhouette)
+    ctx.beginPath();
+    ctx.ellipse(headX, headY - 18, 24, 14, 0, Math.PI, 0);
+    ctx.fillStyle = '#111122';
+    ctx.fill();
+  }
+
+  _drawArms(gestureArmOffset) {
+    const ctx = this.ctx;
+    const w = this.w;
+    const baseY = this.h * 0.52;
+    const shoulderX = w / 2;
+    const shoulderY = baseY + 12;
+
+    // Arm animation depends on state
+    let leftArmAngle = 0.2;
+    let rightArmAngle = -0.2;
+    let leftElbowBend = -0.4;
+    let rightElbowBend = 0.4;
+    let leftHandOpen = false;
+    let rightHandOpen = false;
+
+    switch (this.state) {
+      case 'idle':
+        // Gentle sway
+        leftArmAngle = 0.15 + Math.sin(this.time * 0.02) * 0.05;
+        rightArmAngle = -0.15 + Math.sin(this.time * 0.02 + Math.PI) * 0.05;
+        leftElbowBend = -0.3 + Math.sin(this.time * 0.015) * 0.1;
+        rightElbowBend = 0.3 + Math.sin(this.time * 0.015 + Math.PI) * 0.1;
+        break;
+
+      case 'thinking':
+        // Right hand to chin
+        rightArmAngle = -0.9 + Math.sin(this.time * 0.03) * 0.05;
+        rightElbowBend = 0.8;
+        // Left arm at side
+        leftArmAngle = 0.1 + Math.sin(this.time * 0.02) * 0.03;
+        leftElbowBend = -0.2;
+        break;
+
+      case 'speaking':
+        // Gesturing hands
+        rightArmAngle = -0.5 + Math.sin(this.time * 0.05) * 0.25;
+        rightElbowBend = 0.2 + Math.sin(this.time * 0.03) * 0.15;
+        rightHandOpen = true;
+        leftArmAngle = 0.3 + Math.sin(this.time * 0.04 + Math.PI) * 0.15;
+        leftElbowBend = -0.1 + Math.sin(this.time * 0.03) * 0.1;
+        leftHandOpen = true;
+        break;
+
+      case 'analyzing':
+        // Typing / data processing motion
+        rightArmAngle = -0.6 + Math.sin(this.time * 0.08) * 0.1;
+        rightElbowBend = 0.6;
+        leftArmAngle = 0.5 + Math.sin(this.time * 0.08 + Math.PI) * 0.1;
+        leftElbowBend = -0.5;
+        // Fingers tapping motion
+        rightHandOpen = Math.sin(this.time * 0.12) > 0;
+        leftHandOpen = Math.sin(this.time * 0.12 + Math.PI) > 0;
+        break;
+    }
+
+    // Apply gesture arm offset from head
+    rightArmAngle += gestureArmOffset * 0.3;
+
+    // Upper arm length
+    const upperLen = 45;
+    const forearmLen = 40;
+
+    // ── LEFT ARM ──
+    ctx.save();
+    ctx.translate(shoulderX - 38, shoulderY);
+    // Upper arm
+    const lElbowX = Math.cos(-Math.PI/2 + leftArmAngle) * upperLen;
+    const lElbowY = Math.sin(-Math.PI/2 + leftArmAngle) * upperLen;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(lElbowX, lElbowY);
+    ctx.strokeStyle = this.suitColor;
+    ctx.lineWidth = 10;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Forearm
+    ctx.translate(lElbowX, lElbowY);
+    const lHandX = Math.cos(-Math.PI/2 + leftArmAngle + leftElbowBend) * forearmLen;
+    const lHandY = Math.sin(-Math.PI/2 + leftArmAngle + leftElbowBend) * forearmLen;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(lHandX, lHandY);
+    ctx.strokeStyle = this.suitLapel;
+    ctx.lineWidth = 9;
+    ctx.stroke();
+
+    // Hand (suit-colored circle)
+    ctx.beginPath();
+    ctx.arc(lHandX, lHandY, 5, 0, Math.PI * 2);
+    ctx.fillStyle = this.skinTone;
+    ctx.fill();
+
+    // Fingers if open
+    if (leftHandOpen) {
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.arc(lHandX + i * 4, lHandY - 6, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = this.skinTone;
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    // ── RIGHT ARM ──
+    ctx.save();
+    ctx.translate(shoulderX + 38, shoulderY);
+    const rElbowX = Math.cos(-Math.PI/2 + rightArmAngle) * upperLen;
+    const rElbowY = Math.sin(-Math.PI/2 + rightArmAngle) * upperLen;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(rElbowX, rElbowY);
+    ctx.strokeStyle = this.suitColor;
+    ctx.lineWidth = 10;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    ctx.translate(rElbowX, rElbowY);
+    const rHandX = Math.cos(-Math.PI/2 + rightArmAngle + rightElbowBend) * forearmLen;
+    const rHandY = Math.sin(-Math.PI/2 + rightArmAngle + rightElbowBend) * forearmLen;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(rHandX, rHandY);
+    ctx.strokeStyle = this.suitLapel;
+    ctx.lineWidth = 9;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(rHandX, rHandY, 5, 0, Math.PI * 2);
+    ctx.fillStyle = this.skinTone;
+    ctx.fill();
+
+    if (rightHandOpen) {
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.arc(rHandX + i * 4, rHandY - 6, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = this.skinTone;
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  _drawPodium() {
+    const ctx = this.ctx;
+    const w = this.w;
+    const h = this.h;
+    const baseY = h * 0.52;
+
+    // Podium / desk at waist level
+    const podiumY = baseY + 100;
+    const podiumW = 160;
+    const podiumH = 28;
+
+    // Podium body
+    ctx.beginPath();
+    ctx.roundRect((w - podiumW)/2, podiumY, podiumW, podiumH, [0, 0, 6, 6]);
+    ctx.fillStyle = '#1e1e3a';
+    ctx.fill();
+    ctx.strokeStyle = '#2a2a50';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Podium front panel detail
+    ctx.beginPath();
+    ctx.roundRect((w - podiumW)/2 + 20, podiumY + 6, podiumW - 40, podiumH - 12, 3);
+    ctx.fillStyle = '#161630';
+    ctx.fill();
+
+    // Subtle gavel on top right
+    ctx.save();
+    ctx.translate((w + podiumW)/2 - 20, podiumY - 4);
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(-8, -4, 16, 6);
+    ctx.fillRect(-16, -10, 4, 18);
+    ctx.restore();
+  }
+
+  render() {
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.w, this.h);
+
+    this._drawBackground();
+    this._drawPodium();
+    const gestureOffset = 0; // could be driven by audio amplitude
+    this._drawBody();
+    this._drawArms(gestureOffset);
+    this._drawHead(gestureOffset);
+  }
+
+  _animate() {
+    this.time++;
+    this.render();
+    requestAnimationFrame(() => this._animate());
+  }
+}
+
+// ── Initialize ────────────────────────────────────────────────
+const mascot = new DigitalLawyerMascot('mascotCanvas');
+
+// Expose for Gradio integration
+window.__mascot = mascot;
+
+// Handle state changes from Gradio
+window.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'mascot-state') {
+    mascot.setState(e.data.state, e.data.text || '');
+  }
+});
+
+// Also watch for status text changes (for Gradio integration)
+const statusObserver = new MutationObserver(() => {
+  const statusEl = document.getElementById('mascotStatusBridge');
+  if (!statusEl) return;
+  const raw = statusEl.textContent || statusEl.innerText || '';
+  const lower = raw.toLowerCase();
+  if (lower.includes('thinking') || lower.includes('analyz')) {
+    mascot.setState('thinking', '');
+  } else if (lower.includes('speaking') || lower.includes('respond')) {
+    mascot.setState('speaking', '');
+  } else if (lower.includes('analyzing') || lower.includes('process')) {
+    mascot.setState('analyzing', '');
+  } else {
+    mascot.setState('idle', '');
+  }
+});
+statusObserver.observe(document.body, { childList: true, subtree: true });
+
+// Signal ready
+console.log('Digital Lawyer Mascot initialized');
+</script>
+</body>
+</html>

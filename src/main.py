@@ -251,9 +251,15 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
         return result
 
     # Build UI
+    mascot_html_path = Path(__file__).resolve().parent / "ui" / "mascot.html"
+    mascot_html = ""
+    if mascot_html_path.exists():
+        with open(mascot_html_path) as f:
+            mascot_html = f.read()
+
     with gr.Blocks(title="OpenTender + Counsel", theme=gr.themes.Soft()) as ui:
         gr.Markdown("# 🛡️ OpenTender + Counsel")
-        gr.Markdown("Upload a government tender document — get a corruption risk report *and* chat with a Virtual Lawyer about what to do.")
+        gr.Markdown("Upload a government tender document — get a corruption risk report *and* chat with a Digital Lawyer about legal next steps.")
 
         with gr.Tab("📄 Analyze Tender"):
             with gr.Row():
@@ -270,21 +276,74 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
                 outputs=[text_output, html_output],
             )
 
-        with gr.Tab("⚖️ Virtual Lawyer"):
-            gr.Markdown("Ask the Virtual Lawyer about legal next steps.")
-            question_input = gr.Textbox(
-                label="Your Question",
-                placeholder="e.g., Is it illegal to have only 3 days for bids? How do I report this? Draft a complaint to KPK.",
-                lines=3,
-            )
-            ask_btn = gr.Button("💬 Ask", variant="primary")
-            answer_output = gr.Markdown(label="Response")
+        with gr.Tab("⚖️ Digital Lawyer"):
+            with gr.Row(equal_height=True):
+                with gr.Column(scale=1, min_width=320):
+                    # Mascot container
+                    mascot_component = gr.HTML(value=mascot_html, label="Digital Lawyer")
+                    mascot_status = gr.Markdown("**Status:** Ready")
+                with gr.Column(scale=2):
+                    gr.Markdown("Ask the Digital Lawyer about legal next steps for your tender.")
+                    question_input = gr.Textbox(
+                        label="Your Question",
+                        placeholder="e.g., Is it illegal to have only 3 days for bids? How do I report this? Draft a complaint to CIAA.",
+                        lines=4,
+                    )
+                    ask_btn = gr.Button("💬 Ask", variant="primary", size="lg")
+                    evidence_checkbox = gr.Checkbox(label="I have preserved copies of evidence", value=False)
+                    answer_output = gr.Markdown(label="Response")
 
-            ask_btn.click(
-                fn=counsel_question,
-                inputs=[question_input],
-                outputs=[answer_output],
+                    def update_mascot_status(question):
+                        if not question.strip():
+                            return "**Status:** Ready", None
+                        return "**Status:** ⚖️ Thinking… analyzing legal framework", None
+
+                    def finalize_status(question, has_evidence):
+                        answer = counsel_question(question)
+                        if not answer or "error" in answer.lower() or "please" in answer.lower():
+                            status = "**Status:** Ready to help"
+                        else:
+                            status = "**Status:** ⚖️ Speaking — providing legal analysis"
+                        return answer, status
+
+                    ask_btn.click(
+                        fn=update_mascot_status,
+                        inputs=[question_input],
+                        outputs=[mascot_status, gr.State()],
+                    ).then(
+                        fn=finalize_status,
+                        inputs=[question_input, evidence_checkbox],
+                        outputs=[answer_output, mascot_status],
+                    )
+
+        with gr.Tab("📋 Evidence Checklist"):
+            with gr.Row():
+                checklist_report_id = gr.Textbox(label="Report ID (from Analyze tab)", placeholder="Paste report ID here")
+                checklist_jurisdiction = gr.Dropdown(
+                    label="Jurisdiction",
+                    choices=["np", "ke", "za", "ng", "bd"],
+                    value="np",
+                )
+            checklist_btn = gr.Button("📋 Generate Checklist", variant="primary")
+            checklist_output = gr.Markdown(label="Evidence Checklist")
+            # Checklist endpoint - simplified version using mock
+            # In production this calls the API
+            gr.Markdown("_Upload a tender and get a report ID above, then generate an evidence checklist here._")
+
+        with gr.Tab("📄 Export Complaint"):
+            with gr.Row():
+                draft_title = gr.Textbox(label="Complaint Title", placeholder="e.g., Complaint regarding tender X")
+                draft_jurisdiction = gr.Dropdown(
+                    label="Jurisdiction", choices=["np", "ke", "za", "ng", "bd"], value="np"
+                )
+            draft_body = gr.Textbox(label="Complaint Body", lines=8, placeholder="Paste the complaint text generated by the Digital Lawyer...")
+            draft_template = gr.Dropdown(
+                label="Template",
+                choices=["", "standard", "detailed", "urgent"],
+                value="",
             )
+            export_btn = gr.Button("💾 Export as .txt", variant="primary")
+            export_output = gr.File(label="Download")
 
         gr.Markdown("---")
         gr.Markdown(
