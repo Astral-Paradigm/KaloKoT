@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.analyzer import TenderExtractor, TenderParser, RiskScorer, ReportGenerator
-from src.lawyer import VirtualLawyer
+from src.lawyer import VirtualLawyer, EvidenceChecklist
 from src.shared.llm import LLMClient
 from src.shared.jurisdiction import JurisdictionLoader
 from src.shared.chunker import DocumentChunker, DocumentChunk
@@ -86,6 +86,16 @@ def run_cli(file_path: str, no_llm: bool = False,
     # Generate report
     print("\n" + reporter.generate_heatmap(report))
     print(reporter.generate_text(report))
+
+    # Evidence checklist
+    print("\n📋 Generate evidence preservation checklist? (y/N): ", end="")
+    try:
+        ans = input().strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        ans = ""
+    if ans in ("y", "yes"):
+        checklist = EvidenceChecklist(loader)
+        print("\n" + checklist.generate(report, jurisdiction))
 
     # Counsel mode if user asks questions
     print("\n📋 Type a question for the Virtual Lawyer, or press Enter to skip.")

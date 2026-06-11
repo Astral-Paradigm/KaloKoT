@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Optional
 
 from ..shared.models import JurisdictionCode, ComplaintDraft, CounselRequest
@@ -133,3 +135,65 @@ class DraftGenerator:
             instructions="Fill in the [bracketed] fields with your specific details. "
                          "Review with a qualified attorney before filing.",
         )
+
+    def export_txt(self, draft: ComplaintDraft, path: Optional[str] = None) -> str:
+        """Export a complaint draft as a plain-text file.
+
+        Returns the full text content. If path is given, saves to that file.
+        Default output dir: data/output/ (created if needed).
+        """
+        header = (
+            f"{'=' * 60}\n"
+            f"  {draft.title}\n"
+            f"{'=' * 60}\n\n"
+        )
+        if draft.template_name:
+            header += f"Template: {draft.template_name}\n"
+        header += f"Jurisdiction: {draft.jurisdiction.value}\n\n"
+
+        footer = (
+            f"\n\n{'-' * 60}\n"
+            f"{draft.instructions}\n"
+        )
+
+        content = header + draft.body + footer
+
+        if path:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+        return content
+
+    def export_docx(self, draft: ComplaintDraft, path: Optional[str] = None) -> str:
+        """Export a complaint draft as .docx (plain text fallback if python-docx missing).
+
+        Returns the path to the saved file.
+        """
+        if path is None:
+            path = f"data/output/{draft.jurisdiction.value}_{draft.template_name}.txt"
+
+        try:
+            from docx import Document
+            doc = Document()
+            doc.add_heading(draft.title, level=1)
+            doc.add_paragraph(f"Jurisdiction: {draft.jurisdiction.value}")
+            if draft.template_name:
+                doc.add_paragraph(f"Template: {draft.template_name}")
+            doc.add_paragraph("")
+            for para in draft.body.split("\n"):
+                if para.strip():
+                    doc.add_paragraph(para.strip())
+                else:
+                    doc.add_paragraph("")
+            doc.add_paragraph("")
+            doc.add_paragraph(draft.instructions)
+            outpath = path.replace(".txt", ".docx")
+            Path(outpath).parent.mkdir(parents=True, exist_ok=True)
+            doc.save(outpath)
+            return outpath
+        except ImportError:
+            # Fallback: save as .txt
+            txt_path = path.replace(".docx", ".txt")
+            self.export_txt(draft, txt_path)
+            return txt_path

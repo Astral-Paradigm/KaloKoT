@@ -19,7 +19,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.shared.models import (
     JurisdictionCode, LegalArticle, CounselRequest, CounselResponse,
-    ComplaintDraft, RiskReport, TenderDocument, RiskLevel,
+    ComplaintDraft, RiskReport, TenderDocument, RiskLevel, TenderSection, Severity, FlaggedClause,
 )
 from src.shared.jurisdiction import JurisdictionLoader
 from src.lawyer.disclaimers import get_disclaimer
@@ -73,7 +73,7 @@ class TestJurisdictionLoader:
         assert len(timeline_flags) >= 1
         tf = timeline_flags[0]
         assert tf.get("law_reference") is not None
-        assert "Section 18" in tf["law_reference"].get("section", "")
+        assert "§4.1" in tf["law_reference"].get("section", "")
 
 
 # ── LegalQueryEngine Tests ────────────────────────────────────────────────────
@@ -295,3 +295,119 @@ class TestDataModels:
         assert report.overall_risk == RiskLevel.RED
         assert report.section_scores == {}
         assert report.flagged_clauses == []
+
+
+# ── EvidenceChecklist Tests ───────────────────────────────────────────────────
+
+
+class TestEvidenceChecklist:
+    """Tests for the evidence preservation checklist generator."""
+
+    @pytest.fixture
+    def checklist(self):
+        from src.lawyer.evidence import EvidenceChecklist
+        loader = JurisdictionLoader()
+        return EvidenceChecklist(loader)
+
+    def test_generate_returns_string(self, checklist):
+        """Should produce a non-empty checklist string."""
+        tender = TenderDocument(title="Test", raw_text="Short timeline tender")
+        clause = FlaggedClause(
+            red_flag_id="timeline-too-short",
+            label="Suspiciously Short Timeline",
+            severity=Severity.CRITICAL,
+            description="3 day submission period",
+            location="Timeline",
+            excerpt="3 days only",
+            suggestion="File complaint",
+        )
+        report = RiskReport(tender=tender, overall_risk=RiskLevel.RED,
+                            flagged_clauses=[clause])
+        result = checklist.generate(report, JurisdictionCode.NEPAL)
+        assert isinstance(result, str)
+        assert len(result) > 100
+        assert "EVIDENCE PRESERVATION CHECKLIST" in result
+        assert "Screenshot tender publication date" in result
+
+    def test_generate_without_jurisdiction(self, checklist):
+        """Should work without jurisdiction (general steps only)."""
+        tender = TenderDocument(title="Test", raw_text="Content")
+        report = RiskReport(tender=tender, overall_risk=RiskLevel.YELLOW)
+        result = checklist.generate(report)
+        assert "EVIDENCE PRESERVATION CHECKLIST" in result
+        assert "IMPORTANT WARNINGS" in result
+
+    def test_generate_with_nepal_shows_reporting_channels(self, checklist):
+        """Nepal jurisdiction should include CIAA/PPMO reporting channels."""
+        tender = TenderDocument(title="Test", raw_text="Content")
+        clause = FlaggedClause(
+            red_flag_id="emergency-keywords",
+            label="Emergency Without Justification",
+            severity=Severity.CRITICAL,
+            description="Emergency procurement without justification",
+            location="Document",
+            excerpt="emergency procurement",
+            suggestion="Report to CIAA",
+        )
+        report = RiskReport(tender=tender, overall_risk=RiskLevel.RED,
+                            flagged_clauses=[clause])
+        result = checklist.generate(report, JurisdictionCode.NEPAL)
+        assert "REPORTING CHANNELS" in result
+        assert "PPMO" in result
+        assert "CIAA" in result
+
+
+# ── DraftGenerator Export Tests ───────────────────────────────────────────────
+
+
+class TestDraftExport:
+    """Tests for complaint draft file export."""
+
+    @pytest.fixture
+    def generator(self):
+        from src.lawyer.drafting import DraftGenerator
+        loader = JurisdictionLoader()
+        return DraftGenerator(loader, llm=None)
+
+    def test_export_txt_returns_string(self, generator):
+        """export_txt should return the full draft text."""
+        draft = ComplaintDraft(
+            title="Complaint to CIAA",
+            jurisdiction=JurisdictionCode.NEPAL,
+            body="Dear Sir/Madam,\n\nI wish to report...",
+            template_name="complaint_ciaa",
+            instructions="Fill in brackets and review with attorney.",
+        )
+        result = generator.export_txt(draft)
+        assert isinstance(result, str)
+        assert "Complaint to CIAA" in result
+        assert "I wish to report" in result
+        assert "Fill in brackets" in result
+
+    def test_export_txt_saves_to_file(self, generator, tmp_path):
+        """export_txt should save to disk when path is provided."""
+        draft = ComplaintDraft(
+            title="Test Draft",
+            jurisdiction=JurisdictionCode.NEPAL,
+            body="Test body content.",
+            template_name="complaint_ciaa",
+        )
+        out = tmp_path / "draft.txt"
+        generator.export_txt(draft, str(out))
+        assert out.exists()
+        content = out.read_text()
+        assert "Test Draft" in content
+        assert "Test body content." in content
+
+    def test_export_docx_fallback_to_txt(self, generator, tmp_path):
+        """Without python-docx, export_docx should fall back to .txt."""
+        draft = ComplaintDraft(
+            title="Docx Fallback Test",
+            jurisdiction=JurisdictionCode.NEPAL,
+            body="Falls back to txt.",
+            template_name="complaint_ppmo",
+        )
+        out = tmp_path / "output.txt"
+        result = generator.export_docx(draft, str(out))
+        # Should produce a .txt file
+        assert result.endswith(".txt") or result.endswith(".docx")

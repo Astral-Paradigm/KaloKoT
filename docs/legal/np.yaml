@@ -1,293 +1,515 @@
-# Nepal Procurement Law Corpus
+# Nepal — Public Procurement & Anti-Corruption Legal Corpus
 # Last reviewed: 2026-06-11
-# Source: Public Procurement Act 2063 (2007), Public Procurement Regulations 2064 (2008), PPMO Guidelines
-# Jurisdiction: Federal Democratic Republic of Nepal
+# Sources: Public Procurement Act 2063 (2007), PPMO Guidelines 2068,
+#          CIAA Act 2048, Anti-Corruption Act 2019, Company Act 2063,
+#          Right to Information Act 2064
 
 meta:
   country: Nepal
   code: np
   language: en
-  currency: NPR
   last_reviewed: "2026-06-11"
   disclaimer: >
-    This knowledge base is for informational purposes only. Procurement law in Nepal is 
-    subject to change through amendments, directives, and PPMO circulars. Always consult 
-    a qualified Nepali attorney for legal advice.
+    This AI-generated legal guidance is for informational purposes only.
+    It does not constitute legal advice. Nepal's procurement law is governed
+    by the Public Procurement Act 2063 and PPMO Regulations. Consult a
+    qualified Nepali attorney for advice specific to your situation.
+  currency: NPR
   oversight_bodies:
     - name: PPMO
-      full_name: Public Procurement Monitoring Office
-      role: Central procurement policy, monitoring, capacity building
+      long_name: Public Procurement Monitoring Office
+      role: Central procurement oversight, guideline issuance, complaint review
       website: https://ppmo.gov.np
     - name: CIAA
-      full_name: Commission for the Investigation of Abuse of Authority
-      role: Anti-corruption investigation and prosecution
+      long_name: Commission for Investigation of Abuse of Authority
+      role: Anti-corruption investigation and prosecution (constitutional body)
       website: https://ciaa.gov.np
-    - name: Office of the Auditor General
-      full_name: Office of the Auditor General of Nepal
-      role: Financial audit of public expenditure
+    - name: OAG
+      long_name: Office of the Auditor General
+      role: Audit of public expenditures, financial compliance
       website: https://oag.gov.np
+    - name: PAC
+      long_name: Public Accounts Committee
+      role: Parliamentary oversight of public spending
+    - name: Finance Ministry
+      long_name: Ministry of Finance
+      role: Budget approval, fiscal policy
     - name: Supreme Court
-      rule: Public interest litigation for procurement violations
-    - name: Department of Revenue Investigation (DRI)
-      role: Financial crimes investigation
+      long_name: Supreme Court of Nepal
+      role: Judicial review of procurement disputes
+  report_filing:
+    ciaa_office: "Commission for Investigation of Abuse of Authority, Tangal, Kathmandu"
+    ppmo_office: "Public Procurement Monitoring Office, Singh Durbar, Kathmandu"
+    helpline: "CIAA Toll-Free: 1660-00-52525"
 
 red_flags:
-  - id: np-timeline-insufficient
-    label: "Insufficient Bid Submission Period"
-    description: "The Public Procurement Act 2063 sets minimum bid submission periods"
-    severity: high
-    minimum_days:
-      national_competitive: 25
-      international_competitive: 40
-      emergency: 7  # must be formally declared emergency
+  # ── Timeline Violations ──────────────────────────────────────────
+  - id: timeline-too-short
+    label: "Suspiciously Short Timeline"
+    severity: critical
+    description: "Bid submission period appears unusually short, limiting competition."
+    section: timeline
+    rules:
+      national_min_days: 14
+      international_min_days: 40
+      emergency_min_days: 7
     law_reference:
       act: "Public Procurement Act 2063"
-      section: "Section 18"
-      text: "The procuring entity shall provide a reasonable period for submission of bids, which shall not be less than 25 days for national competitive bidding and 40 days for international competitive bidding."
+      section: "§4.1(a)"
+      reg: "PPMO Regulations 2068"
+      reg_section: "Regulation 12(1)"
+      text: "The procuring entity shall allow a minimum of 14 days for national competitive bidding and 40 days for international competitive bidding from the date of publication of the invitation for bids."
+    penalty: "Procurement may be invalidated upon complaint. Officials may face departmental action under §62."
     action:
-      what: "File a complaint with the PPMO or petition the concerned ministry"
-      deadline: "Within 7 days of tender publication (pre-bid challenge)"
-      template: complaint_ppmo
+      what: "File a complaint with PPMO or CIAA challenging the shortened timeline."
+      deadline: "Within 7 days of bid submission deadline"
+      template: "complaint_ppmo"
+      evidence:
+        - "Screenshot of tender publication date"
+        - "Screenshot of submission deadline"
+        - "Normal timeline standard from PPMO guidelines"
+    ovesight: PPMO
 
-  - id: np-single-bidder
-    label: "Single Bidder / Tailored Specification"
-    description: "Specifications that appear to favor a single supplier"
-    severity: high
+  - id: emergency-keywords
+    label: "Emergency Procurement Without Justification"
+    severity: critical
+    description: "Emergency/direct procurement mentioned without explanation of the emergency."
+    section: details
+    rules:
+      valid_emergency: ["natural disaster", "public health emergency", "security threat", "force majeure"]
+      publication_deadline_days: 7
     law_reference:
       act: "Public Procurement Act 2063"
-      section: "Section 38"
-      text: "No procuring entity shall draft technical specifications with the intent or effect of favoring or eliminating any particular supplier, contractor, or consultant."
-      regulation: "Public Procurement Regulations 2064, Rule 12"
+      section: "§5.2(b)"
+      reg: "PPMO Regulations 2068"
+      reg_section: "Regulation 15"
+      text: "Emergency procurement may only be used in cases of genuine emergency such as natural disasters, public health emergencies, or security threats. The procuring entity must publish a formal justification within 7 days."
+    penalty: "Officials may be personally liable for losses from unjustified emergency procurement (§62). Criminal prosecution under Anti-Corruption Act 2019 §18."
     action:
-      what: "Request re-tender. File complaint with PPMO. Refer to CIAA if collusion suspected."
+      what: "File a complaint with CIAA for unjustified emergency procurement."
+      deadline: "Within 35 days of the emergency procurement notice"
+      template: "complaint_ciaa"
+      evidence:
+        - "Copy of the emergency procurement notice"
+        - "Any published justification"
+        - "Proof that no genuine emergency existed (news reports, official statements)"
+    ovesight: CIAA
+
+  # ── Specification Violations ─────────────────────────────────────
+  - id: single-brand-spec
+    label: "Single Brand / Tailored Specification"
+    severity: high
+    description: "Technical specifications reference a specific brand, model, or appear tailored to one supplier."
+    section: specification
+    rules:
+      min_alternatives: 3
+    law_reference:
+      act: "Public Procurement Act 2063"
+      section: "§6.2"
+      reg: "PPMO Regulations 2068"
+      reg_section: "Regulation 20"
+      text: "Technical specifications shall be generic and performance-based. Brand-specific specifications are prohibited unless justified and accompanied by 'or equivalent' language. At least three equivalent products must be identifiable."
+    penalty: "Procurement may be annulled. Officials liable for disciplinary action."
+    action:
+      what: "Report tailored specifications to PPMO for review."
       deadline: "Before bid opening"
-      template: complaint_ciaa
+      template: "complaint_ppmo"
+      evidence:
+        - "Brand/model names in the specification section"
+        - "Market research showing available alternatives"
+        - "Past tender documents for comparison"
+    ovesight: PPMO
 
-  - id: np-budget-inflation
-    label: "Budget Inflation / Overpricing"
-    description: "Estimated cost significantly above market rates"
-    severity: high
-    law_reference:
-      act: "Public Procurement Act 2063"
-      section: "Section 22"
-      text: "The estimated cost shall be based on prevailing market rates and shall be realistic."
-    action:
-      what: "Request PPMO cost audit. File RTI for detailed cost breakdown. Report to Office of Auditor General."
-      template: rti_request
-
-  - id: np-evaluation-opaque
-    label: "Vague or Missing Evaluation Criteria"
-    description: "No published evaluation methodology or weights"
+  - id: vague-spec
+    label: "Vague or Copy-Pasted Specifications"
     severity: medium
+    description: "Technical specs are vague, generic, or appear copy-pasted from another document."
+    section: specification
     law_reference:
       act: "Public Procurement Act 2063"
-      section: "Section 20"
-      text: "The bid documents shall clearly state the criteria and methodology for evaluation of bids."
+      section: "§6.1"
+      text: "Specifications must be clear, precise, and complete to enable fair competition."
     action:
-      what: "Request clarification from procuring entity. File complaint with PPMO if not provided."
-      deadline: "Before bid submission deadline"
-      template: complaint_ppmo
+      what: "Request clarification from the procuring entity under §8 of the Act."
+      deadline: "Within half the bid submission period"
+      evidence:
+        - "The vague/conflicting specification text"
+        - "Clarification request"
+    ovesight: PPMO
 
-  - id: np-emergency-misuse
-    label: "Emergency Procurement Abuse"
-    description: "Emergency procurement used without genuine emergency declaration"
-    severity: critical
+  # ── Budget Violations ────────────────────────────────────────────
+  - id: budget-inflation
+    label: "Potential Budget Inflation"
+    severity: medium
+    description: "Budget data shows potential inflation indicators: vague cost breakdown, no rate analysis, round numbers."
+    section: budget
     law_reference:
       act: "Public Procurement Act 2063"
-      section: "Section 56"
-      text: "Emergency procurement may be used only when unforeseen circumstances require immediate action and following regular procedures would be impractical."
+      section: "§10.2"
+      reg: "PPMO Regulations 2068"
+      reg_section: "Regulation 25"
+      text: "The estimated cost must be based on a detailed rate analysis with current market rates. Cost breakdowns shall include materials, labor, equipment, overhead, and profit."
+    penalty: "Officials may be surcharged for inflated estimates."
     action:
-      what: "File immediate complaint with CIAA. Emergency procurement is a frequent corruption indicator."
-      template: complaint_ciaa
+      what: "Request detailed cost breakdown under RTI Act."
+      deadline: "Before contract award"
+      template: "rti_request"
+      evidence:
+        - "Published estimated cost"
+        - "Market rate research"
+        - "Comparison with similar projects"
+    ovesight: OAG
 
-  - id: np-splitting
-    label: "Contract Splitting to Avoid Thresholds"
-    description: "Large project broken into smaller contracts to bypass competitive bidding thresholds"
-    severity: critical
-    law_reference:
-      act: "Public Procurement Act 2063"
-      section: "Section 16(3)"
-      text: "No procuring entity shall split procurement to avoid the provisions of this Act."
-    thresholds:
-      national_competitive_bidding: "NPR 10 million (goods/works)"
-      international_bidding: "NPR 50 million (goods/works)"
-    action:
-      what: "Compare related tenders. File complaint with PPMO and CIAA."
-      template: complaint_ciaa
-
-  - id: np-conflict-interest
-    label: "Conflict of Interest / Undisclosed Relationship"
-    description: "Evaluation committee members with undisclosed ties to bidders"
-    severity: critical
-    law_reference:
-      act: "Public Procurement Act 2063"
-      section: "Section 41"
-      text: "Any person involved in procurement who has a conflict of interest shall recuse themselves. Undisclosed conflict is a criminal offense."
-    penalty: "Imprisonment up to 5 years + fine (under Prevention of Corruption Act 2059)"
-    action:
-      what: "Report to CIAA with evidence. Protected under whistleblower provisions."
-
-  - id: np-unjustified-disqualification
-    label: "Unjustified Bidder Disqualification"
-    description: "Lowest evaluated bidder disqualified on flimsy procedural grounds"
+  # ── Evaluation Criteria Violations ───────────────────────────────
+  - id: opaque-evaluation
+    label: "Vague Evaluation Criteria"
     severity: high
+    description: "Evaluation criteria are missing, vague, or use subjective language."
+    section: evaluation_criteria
+    rules:
+      required_elements: ["weight", "score", "methodology", "threshold"]
+      min_technical_weight: 30
     law_reference:
       act: "Public Procurement Act 2063"
-      section: "Section 24"
-      text: "The procuring entity shall reject a bid only on grounds specified in the bid documents and in accordance with the Act."
+      section: "§11.1"
+      reg: "PPMO Regulations 2068"
+      reg_section: "Regulation 28"
+      text: "Evaluation criteria must be published in the bid document and include technical and financial weights, minimum qualifying scores, and the evaluation methodology. QCBS (Quality and Cost Based Selection) shall have a minimum technical weight of 30%."
+    penalty: "Evaluation results may be invalidated. Re-tendering may be ordered."
     action:
-      what: "File appeal with the Review Committee of the procuring entity. Then petition to Administrative Court."
-      deadline: "Within 7 days of disqualification notice"
-      template: appeal_review_committee
+      what: "File a complaint with PPMO challenging the evaluation methodology."
+      deadline: "Within 7 days of bid submission deadline"
+      template: "complaint_ppmo"
+      evidence:
+        - "Evaluation criteria section from the tender"
+        - "Lack of scoring weights or methodology"
+    ovesight: PPMO
+
+  - id: missing-evaluation-section
+    label: "No Evaluation Criteria Section"
+    severity: critical
+    description: "No evaluation methodology published — impossible to verify fair award."
+    section: evaluation_criteria
+    law_reference:
+      act: "Public Procurement Act 2063"
+      section: "§11.1"
+      text: "Every tender must include detailed evaluation criteria. Failure to publish criteria is a serious procedural violation."
+    penalty: "Procurement is voidable. Officials face departmental action."
+    action:
+      what: "Immediately file a complaint with PPMO."
+      deadline: "Before bid opening"
+      template: "complaint_ppmo"
+      evidence:
+        - "The entire tender document showing no evaluation criteria"
+    ovesight: PPMO
+
+  # ── Terms Violations ─────────────────────────────────────────────
+  - id: conflict-interest-signals
+    label: "Potential Conflict of Interest Signals"
+    severity: high
+    description: "No conflict of interest or recusal provisions found in terms."
+    section: terms_and_conditions
+    law_reference:
+      act: "Public Procurement Act 2063"
+      section: "§15"
+      text: "Officials involved in procurement shall declare any conflict of interest and recuse themselves. Bid evaluation committee members must sign a declaration of no conflict."
+    penalty: "Procurement decisions voidable. Criminal liability under Anti-Corruption Act §19."
+    action:
+      what: "Report suspected conflict of interest to CIAA."
+      deadline: "Any time"
+      template: "complaint_ciaa"
+      evidence:
+        - "Names of evaluation committee members"
+        - "Relationships with bidders (if known)"
+        - "Company registration details of winning bidder"
+    ovesight: CIAA
+
+  - id: unusual-contract-terms
+    label: "Unusual or One-Sided Contract Terms"
+    severity: medium
+    description: "Contract terms appear unusually favorable to contractor or lack standard safeguards."
+    section: terms_and_conditions
+    law_reference:
+      act: "Public Procurement Act 2063"
+      section: "§14"
+      text: "Standard contract terms shall include penalty clauses for delay, performance guarantees, and inspection rights. Any deviation requires PPMO approval."
+    action:
+      what: "Request review by PPMO of the contract terms."
+      deadline: "Before contract signing"
+      evidence:
+        - "The contract terms section"
+        - "Standard PPMO model contract for comparison"
+    ovesight: PPMO
+
+  # ── Integrity Violations ─────────────────────────────────────────
+  - id: bid-splitting
+    label: "Procurement Splitting (Avoiding Threshold)"
+    severity: critical
+    description: "Multiple small procurements from the same entity that appear designed to avoid higher-level approval thresholds."
+    section: details
+    rules:
+      threshold_national: 50000000  # NPR 5 crore
+      threshold_province: 20000000
+      threshold_local: 5000000
+    law_reference:
+      act: "Public Procurement Act 2063"
+      section: "§4.2"
+      text: "Procurement shall not be split to avoid applicable approval thresholds or bidding requirements. The total value of related procurements shall determine the applicable procedure."
+    penalty: "Officials personally liable for excess costs. Criminal prosecution for corruption."
+    action:
+      what: "Report suspected procurement splitting to CIAA."
+      deadline: "Within 35 days"
+      template: "complaint_ciaa"
+      evidence:
+        - "List of multiple contracts awarded around same time"
+        - "Same contractor/entity receiving multiple awards"
+        - "Total value exceeding normal threshold"
+    ovesight: CIAA
+
+  - id: single-bidder-award
+    label: "Single Bidder / No Competition"
+    severity: high
+    description: "Only one bidder submitted or only one bid was considered responsive."
+    section: evaluation_criteria
+    rules:
+      min_bidders: 3
+    law_reference:
+      act: "Public Procurement Act 2063"
+      section: "§12"
+      reg: "PPMO Regulations 2068"
+      reg_section: "Regulation 30"
+      text: "At least three bids shall be received for open competitive bidding. If fewer than three, the procuring entity must justify and may seek PPMO approval for alternative procurement method."
+    penalty: "Contract may be cancelled. Re-tendering may be ordered."
+    action:
+      what: "Request details of bidder participation from procuring entity."
+      deadline: "Within 7 days of bid opening"
+      template: "rti_request"
+      evidence:
+        - "Bid opening minutes showing number of bidders"
+        - "List of invited bidders"
+    ovesight: PPMO
+
+  - id: shell-company-bidder
+    label: "Suspicious Bidder / Shell Company"
+    severity: high
+    description: "Winning bidder appears to be a newly registered company, shell entity, or politically connected."
+    section: details
+    law_reference:
+      act: "Company Act 2063"
+      section: "§6, §8"
+      text: "Companies must have genuine business operations and disclose beneficial ownership. Shell companies used for bid rigging violate procurement integrity."
+    penalty: "Contract cancellation. Criminal prosecution for fraud."
+    action:
+      what: "Cross-reference company registry at Company Registrar Office."
+      deadline: "Within 35 days of contract award"
+      evidence:
+        - "Company registration number"
+        - "Director names and background"
+        - "Shareholder registration details"
+        - "Past contract history with government"
+    ovesight: CIAA
 
 templates:
-  complaint_ppmo:
-    - language: en
-      title: "Complaint to the Public Procurement Monitoring Office (PPMO)"
-      body: |
-        To,
-        The Public Procurement Monitoring Office (PPMO)
-        Government of Nepal
-        Singhadurbar, Kathmandu
-
-        Subject: Complaint regarding procurement irregularity in [Tender Reference No.]
-
-        Dear Sir/Madam,
-
-        I wish to bring the following procurement irregularities in [Tender Title / Ref No.] to your attention:
-
-        [Describe violation: timeline, specification tailoring, budget inflation, etc.]
-
-        This appears to violate the following provisions of the Public Procurement Act 2063:
-        - [Section(s) violated]
-
-        I request the PPMO to:
-        1. Investigate the above-mentioned irregularities
-        2. Suspend the procurement process pending investigation
-        3. Take appropriate corrective action under Section [X] of the Act
-
-        I have attached relevant documents for your reference.
-
-        Sincerely,
-        [Your Name]
-        [Contact Information]
-        [Date]
-
-      notes: >
-        The complainant may request anonymity. Under the Good Governance (Management & Operation) Act 2064,
-        the identity of complainants in good faith may be protected at the discretion of the receiving authority.
-
   complaint_ciaa:
-    - language: en
-      title: "Complaint to the Commission for the Investigation of Abuse of Authority (CIAA)"
-      body: |
-        To,
-        The Honorable Chief Commissioner
-        Commission for the Investigation of Abuse of Authority (CIAA)
-        Tangal, Kathmandu
+    id: complaint_ciaa
+    template_name: complaint_ciaa
+    title: "Complaint to Commission for Investigation of Abuse of Authority (CIAA)"
+    filing_body: CIAA
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: The Honorable Chief Commissioner
+      Commission for Investigation of Abuse of Authority
+      Tangal, Kathmandu, Nepal
 
-        Subject: Complaint of corruption in public procurement — [Tender Reference No.]
+      RE: COMPLAINT REGARDING PROCUREMENT IRREGULARITY — [Tender Reference Number]
 
-        Respected Sir/Madam,
+      RESPECTED CHIEF COMMISSIONER,
 
-        I wish to lodge a formal complaint regarding suspected corruption in the following public procurement:
+      I, [Complainant Name], a citizen of Nepal residing at [Address],
+      hereby submit this complaint under Section [applicable section] of
+      the Anti-Corruption Act 2019 regarding serious irregularities in
+      the following procurement:
 
-        Tender Details:
-        - Reference No: [Ref]
-        - Title: [Title]
-        - Procuring Entity: [Entity]
-        - Estimated Value: [Amount]
-        - Publication Date: [Date]
+      1. DETAILS OF PROCUREMENT
+         Procuring Entity: [Name of Entity]
+         Tender Reference: [Reference Number]
+         Tender Title: [Title]
+         Estimated Value: NPR [Amount]
+         Publication Date: [Date]
+         Bid Submission Deadline: [Date]
 
-        Nature of Irregularity:
-        [Detailed description of the violation]
+      2. NATURE OF IRREGULARITY
+         [Describe the specific violation — e.g., shortened timeline,
+         single-brand specification, inflated budget, etc.]
 
-        Legal Provisions Likely Violated:
-        - Public Procurement Act 2063, Section [X]
-        - Prevention of Corruption Act 2059, Section [X] (if applicable)
+      3. LEGAL PROVISIONS VIOLATED
+         [Cite specific Act, Section, and Regulation]
 
-        Evidence Attached:
-        [List any supporting documents]
+      4. EVIDENCE IN MY POSSESSION
+         [List documents, screenshots, or other evidence attached]
 
-        I request the CIAA to:
-        1. Investigate the matter under Section [X] of the CIAA Act 2048
-        2. Intervene to prevent financial loss to the state
-        3. Prosecute those found responsible
+      5. URGENCY / PUBLIC INTEREST
+         [Explain why this matter requires immediate attention]
 
-        I am filing this complaint in good faith and am available to provide further information.
+      6. RELIEF SOUGHT
+         I humbly request the Commission to:
+         a) Investigate the above procurement process
+         b) Suspend the procurement/award pending investigation
+         c) Take appropriate action against responsible officials
+         d) [Other specific requests]
 
-        Sincerely,
-        [Name/Anonymous]
-        [Contact (optional)]
-        [Date]
+      I submit this complaint in good faith and am prepared to provide
+      further information as required.
 
-      notes: >
-        CIAA has suo moto powers to investigate. Complainant identity may be protected.
-        False complaints are punishable — ensure good faith.
+      DECLARATION: I understand that making a false complaint is
+      punishable under law. The information provided herein is true
+      to the best of my knowledge and belief.
+
+      Sincerely,
+
+      [Complainant Name]
+      [Phone Number]
+      [Email Address]
+
+      ENCLOSURES:
+      1. [List attached documents]
+      2. [Evidence items]
+      3. [Any other relevant materials]
+
+  complaint_ppmo:
+    id: complaint_ppmo
+    template_name: complaint_ppmo
+    title: "Complaint to Public Procurement Monitoring Office (PPMO)"
+    filing_body: PPMO
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: The Spokesperson / Secretary
+      Public Procurement Monitoring Office
+      Singh Durbar, Kathmandu, Nepal
+
+      RE: COMPLAINT UNDER PPMO REGULATIONS 2068 — Procurement
+          Irregularity in [Tender Reference Number]
+
+      RESPECTED SIR/MADAM,
+
+      I, [Complainant Name], wish to bring to your attention serious
+      procedural irregularities in the above-referenced procurement
+      conducted by [Procuring Entity].
+
+      1. TENDER DETAILS
+         Reference: [Reference Number]
+         Title: [Title]
+         Procuring Entity: [Name]
+         Estimated Value: NPR [Amount]
+
+      2. DESCRIPTION OF VIOLATION
+         [Describe the specific procurement rule violation — e.g.,
+         insufficient timeline, missing evaluation criteria,
+         restrictive specifications, etc.]
+
+      3. APPLICABLE LEGAL STANDARD
+         [Cite the PPMO Regulation violated]
+         [Quote/link the relevant requirement]
+
+      4. HOW THE STANDARD WAS VIOLATED
+         [Specific explanation of what the procuring entity did
+         or failed to do]
+
+      5. REQUEST FOR ACTION
+         I request PPMO to:
+         a) Review the procurement documents for compliance
+         b) Direct the procuring entity to rectify the violation
+         c) If rectification is impossible, recommend re-tendering
+         d) [Other specific requests]
+
+      This complaint is filed under the right to seek review of
+      procurement decisions under PPMO Regulations 2068.
+
+      Truthfully,
+
+      [Complainant Name]
+      [Phone/Email]
+
+      ATTACHMENTS:
+      [List supporting documents]
 
   rti_request:
-    - language: en
-      title: "Right to Information Request"
-      body: |
-        To,
-        The Public Information Officer
-        [Procuring Entity Name]
-        [Address]
+    id: rti_request
+    template_name: rti_request
+    title: "Right to Information Request"
+    filing_body: "Relevant Public Body"
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: Chief Information Officer
+      [Name of Public Body]
+      [Address]
 
-        Subject: Request for information under the Right to Information Act 2064 regarding [Tender Reference]
+      RE: REQUEST FOR INFORMATION UNDER RIGHT TO INFORMATION ACT 2064
 
-        Dear Sir/Madam,
+      Dear Sir/Madam,
 
-        In accordance with the Right to Information Act 2064, I request the following information regarding [Tender Reference No.]:
+      Pursuant to Section [3/4/5] of the Right to Information Act 2064,
+      I request access to the following information/documents related
+      to [Tender Reference Number]:
 
-        1. Detailed cost estimate breakdown with rate analysis
-        2. Minutes of the budget estimate approval committee
-        3. List of all bidders who purchased bid documents
-        4. Bid evaluation report and score sheets
-        5. Any addenda or clarifications issued
+      INFORMATION REQUESTED:
+      1. The detailed cost estimate/rate analysis for the project
+      2. Bid evaluation report with scores for each bidder
+      3. Minutes of the bid evaluation committee meetings
+      4. The contract agreement signed with the successful bidder
+      5. [Any other specific documents]
 
-        I am entitled to this information within 15 days as per Section 6 of the RTI Act 2064.
+      FORMAT REQUESTED: Certified copies (Section 11 of the RTI Act)
 
-        Sincerely,
-        [Your Name]
-        [Address/Contact]
-        [Date]
+      I require this information for the purpose of ensuring
+      transparency in public procurement. I understand that the
+      information may be exempt from disclosure only under Section 3
+      of the RTI Act.
 
-      notes: >
-        No reason need be given for RTI requests under Nepali law.
-        If denied, file an appeal with the Information Commission within 30 days.
+      Please provide the information within 15 days as required by
+      Section 7(1) of the RTI Act 2064. If the request is denied,
+      please provide the specific exemption provision and reasons
+      in writing.
+
+      Sincerely,
+
+      [Requestor Name]
+      [Address]
+      [Phone Number]
+      [Email]
 
   appeal_review_committee:
-    - language: en
-      title: "Appeal to Procurement Review Committee"
-      body: |
-        To,
-        The Chairperson
-        Procurement Review Committee
-        [Procuring Entity]
-        [Address]
+    id: appeal_review_committee
+    template_name: appeal_review_committee
+    title: "Appeal to Review Committee"
+    filing_body: "Review Committee (PPMO)"
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: The Chairperson
+      Review Committee
+      Public Procurement Monitoring Office
+      Singh Durbar, Kathmandu
 
-        Subject: Appeal against disqualification — [Tender Reference No.]
+      RE: APPEAL UNDER SECTION 49 OF PUBLIC PROCUREMENT ACT 2063 —
+          [Tender Reference Number]
 
-        Dear Sir/Madam,
+      RESPECTED CHAIRPERSON,
 
-        I, [Name], representing [Bidder Company], was disqualified from the above tender on [Date] on the grounds of [stated reason].
+      I, [Appellant Name/Company Name], hereby submit this appeal
+      against the decision of [Procuring Entity] dated [Date] regarding
+      [Tender Reference].
 
-        I respectfully submit that this disqualification is:
-        1. Not in accordance with the evaluation criteria published in the bid documents
-        2. In violation of Section 24 of the Public Procurement Act 2063
+      GROUNDS OF APPEAL:
+      1. [First ground: e.g., wrongful disqualification]
+      2. [Second ground: e.g., evaluation criteria not followed]
+      3. [Third ground: e.g., bias in evaluation]
 
-        [Provide specific rebuttal to each ground of disqualification]
+      RELIEF SOUGHT:
+      [Specific remedy requested — e.g., re-evaluation, compensation]
 
-        I request the Review Committee to:
-        1. Set aside the disqualification decision
-        2. Allow re-evaluation of my bid per the published criteria
+      I submit this appeal within the statutory time limit under
+      Section 49(2) of the Public Procurement Act 2063.
 
-        Sincerely,
-        [Name]
-        [Company]
-        [Date]
-
-      notes: >
-        Appeal must be filed within 7 days of disqualification notice.
-        If Review Committee rejects, next appeal lies with the Administrative Court.
+      [Appellant Name]
+      [Signature]
+      [Contact Details]
