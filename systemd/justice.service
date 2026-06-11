@@ -1,0 +1,23 @@
+[Unit]
+Description=Justice_system — Corruption Risk Analyzer & Virtual Lawyer
+After=network.target
+
+[Service]
+Type=simple
+User=Beelzebub
+Group=Beelzebub
+WorkingDirectory=/home/Beelzebub/Documents/Justice_system
+EnvironmentFile=/home/Beelzebub/Documents/Justice_system/.env
+ExecStart=/home/Beelzebub/Documents/Justice_system/.venv/bin/python src/main.py --host ${JUSTICE_HOST:-127.0.0.1} --port ${JUSTICE_PORT:-7860}
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=10
+
+# Security
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+ReadWritePaths=/home/Beelzebub/Documents/Justice_system/data /home/Beelzebub/Documents/Justice_system/logs /home/Beelzebub/Documents/Justice_system/uploads
+
+[Install]
+WantedBy=multi-user.target
