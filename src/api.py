@@ -43,10 +43,12 @@ from src.shared.jurisdiction import JurisdictionLoader
 from src.shared.llm import LLMClient
 from src.shared.chunking import chunk_constitution, get_all_parent_texts
 from src.shared.chroma_store import ChromaLegalStore
+from src.shared.pdf_generator import generate_complaint_pdf, generate_analysis_report_pdf
 from src.shared.models import (
     ComplaintDraft, CounselRequest, CounselResponse,
     JurisdictionCode, RiskReport, TenderDocument,
 )
+from src.shared.tts import speak_text
 from src.shared.vector_search import LegalVectorSearch
 
 # ── Application Setup ─────────────────────────────────────────────────────────
@@ -531,7 +533,7 @@ async def constitution_search(
     }
 
 
-@app.get("/constitution-context", summary="Get full Constitution text for LLM context caching")
+@app.get("/constitution-context", response_class=PlainTextResponse, summary="Get full Constitution text for LLM context caching")
 async def constitution_context():
     """Return the full Constitution of Nepal text for pre-loading into an LLM context window.
 
@@ -540,13 +542,174 @@ async def constitution_context():
     materials (gazettes, uploaded case PDFs).
     """
     store = _get_chroma_store()
-    return {
-        "document": "Constitution of Nepal 2015",
-        "total_chars": len(store.get_context_cache_text()),
-        "full_text": store.get_context_cache_text(),
-        "context_caching_supported": True,
-        "note": "Load this text into the LLM's system prompt or context cache once. Then use /constitution-search for additional supplementary documents.",
-    }
+    text = store.get_context_cache_text()
+    return PlainTextResponse(
+        content=text,
+        headers={"X-Document": "Constitution of Nepal 2015",
+                 "X-Total-Chars": str(len(text))}
+    )
+
+
+# ── Text-to-Speech ─────────────────────────────────────────────────────────────
+
+
+@app.post("/tts", summary="Convert text to speech (ElevenLabs male voice)")
+async def text_to_speech(text: str = Form(...)):
+    """Convert text to speech using ElevenLabs with a deep male voice (Adam)."""
+    audio = speak_text(text)
+    if audio is None:
+        raise HTTPException(status_code=502, detail="TTS unavailable — check ELEVENLABS_API_KEY")
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(audio, media_type="audio/mpeg")
+
+
+# ── Complaint Drafting ─────────────────────────────────────────────────────────
+
+
+@app.post("/draft-complaint", summary="Draft a formal complaint letter and return PDF")
+async def draft_complaint(
+    name: str = Form(...),
+    permanent_address: str = Form(...),
+    temporary_address: str = Form(...),
+    citizenship_no: str = Form(...),
+    phone: str = Form(...),
+    email: str = Form(...),
+    complaint_description: str = Form(...),
+):
+    """Draft a formal complaint letter using the LLM and return as a downloadable PDF.
+
+    Requires complainant info + a description of the issue.
+    The LLM drafts a formal legal complaint letter, then it's wrapped in a PDF.
+    """
+    llm = _get_llm()
+    if not llm:
+        raise HTTPException(status_code=502, detail="LLM not configured — set a provider API key in .env")
+
+    # Search constitution for relevant articles
+    constitution_context = ""
+    try:
+        store = _get_chroma_store()
+        results = store.search(complaint_description, top_k=3)
+        if results:
+            ctx = store.get_search_context(results)
+            if ctx:
+                constitution_context = f"\n\nRelevant Constitutional Articles:\n{ctx}"
+    except Exception:
+        pass
+
+    prompt = (
+        f"You are a legal drafting assistant for Nepal. Draft a formal complaint letter "
+        f"in English based on the following information. Use a professional legal tone.\n\n"
+        f"Complainant Name: {name}\n"
+        f"Permanent Address: {permanent_address}\n"
+        f"Temporary Address: {temporary_address}\n"
+        f"Citizenship No: {citizenship_no}\n"
+        f"Phone: {phone}\n"
+        f"Email: {email}\n\n"
+        f"Complaint Description:\n{complaint_description}\n"
+        f"{constitution_context}\n\n"
+        f"Write the full complaint letter with: "
+        f"1. To: [appropriate authority based on the complaint]\n"
+        f"2. Subject line\n"
+        f"3. Introduction of complainant\n"
+        f"4. Detailed statement of facts\n"
+        f"5. Legal basis (cite relevant constitutional articles where applicable)\n"
+        f"6. Prayer/relief sought\n"
+        f"7. Signature block\n"
+        f"8. List of attached evidence/documents"
+    )
+
+    drafted = llm.generate(
+        "You are a legal drafting assistant for Nepal. Draft formal complaint letters in English.",
+        prompt,
+    )
+
+    # Generate PDF
+    try:
+        pdf_buf = generate_complaint_pdf(
+            name=name,
+            permanent_address=permanent_address,
+            temporary_address=temporary_address,
+            citizenship_no=citizenship_no,
+            phone=phone,
+            email=email,
+            complaint_text=complaint_description,
+            drafted_letter=drafted,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {e}")
+
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        pdf_buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="complaint_letter.pdf"'},
+    )
+
+
+# ── Analysis Report ────────────────────────────────────────────────────────────
+
+
+@app.post("/analysis-report", summary="Generate a legal analysis report and return PDF")
+async def analysis_report(
+    issue: str = Form(...),
+):
+    """Generate a legal analysis report based on a described issue, return as PDF.
+
+    The LLM analyzes the issue against Nepali law (including constitution)
+    and produces a structured report.
+    """
+    llm = _get_llm()
+    if not llm:
+        raise HTTPException(status_code=502, detail="LLM not configured — set a provider API key in .env")
+
+    # Search constitution for relevant articles
+    constitution_context = ""
+    try:
+        store = _get_chroma_store()
+        results = store.search(issue, top_k=5)
+        if results:
+            ctx = store.get_search_context(results)
+            if ctx:
+                constitution_context = f"\n\nRelevant Constitutional Articles:\n{ctx}"
+    except Exception:
+        pass
+
+    prompt = (
+        f"You are a legal analyst for Nepal. Provide a detailed legal analysis "
+        f"of the following issue. Ground your analysis in the Constitution of Nepal 2015 "
+        f"and applicable Nepali laws.\n\n"
+        f"Issue:\n{issue}\n"
+        f"{constitution_context}\n\n"
+        f"Structure your analysis as:\n"
+        f"1. Summary of the Issue\n"
+        f"2. Relevant Legal Provisions (constitution, laws, regulations)\n"
+        f"3. Legal Analysis\n"
+        f"4. Potential Violations Identified\n"
+        f"5. Recommended Actions\n"
+        f"6. References (specific articles, sections)"
+    )
+
+    analysis = llm.generate(
+        "You are a legal analyst for Nepal. Provide detailed legal analysis grounded in Nepali law.",
+        prompt,
+    )
+
+    # Generate PDF
+    try:
+        pdf_buf = generate_analysis_report_pdf(
+            issue=issue,
+            analysis_text=analysis,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {e}")
+
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        pdf_buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="legal_analysis_report.pdf"'},
+    )
 
 
 # ── CLI Entry Point ───────────────────────────────────────────────────────────

@@ -72,21 +72,17 @@ class ChromaLegalStore:
         )
         self._collection_name = collection_name
 
-        # Drop and recreate to ensure clean state
+        # Reuse existing collection if present, otherwise create
         try:
-            existing = self._client.get_collection(collection_name)
-            if existing:
-                self._client.delete_collection(collection_name)
+            self._collection = self._client.get_collection(collection_name)
         except Exception:
-            pass  # doesn't exist yet
-
-        self._collection = self._client.create_collection(
-            name=collection_name,
-            metadata={"hnsw:space": "cosine"},
-            embedding_function=SentenceTransformerEmbeddingFunction(
-                model_name="all-MiniLM-L6-v2"
-            ),
-        )
+            self._collection = self._client.create_collection(
+                name=collection_name,
+                metadata={"hnsw:space": "cosine"},
+                embedding_function=SentenceTransformerEmbeddingFunction(
+                    model_name="all-MiniLM-L6-v2"
+                ),
+            )
 
         # In-memory cache of parent chunks for fast resolution
         self._parents: Dict[str, ParentChunk] = {}
