@@ -19,10 +19,14 @@ from src.analyzer import TenderExtractor, TenderParser, RiskScorer, ReportGenera
 from src.lawyer import VirtualLawyer
 from src.shared.llm import LLMClient
 from src.shared.jurisdiction import JurisdictionLoader
+from src.shared.chunker import DocumentChunker, DocumentChunk
 
 
-def get_llm() -> LLMClient | None:
-    """Initialize LLM client from available API keys."""
+def get_llm(provider: str | None = None,
+            phi_model: str | None = None) -> LLMClient | None:
+    """Initialize LLM client from provider flag or available API keys."""
+    if provider == "phi":
+        return LLMClient(provider="phi", model=phi_model)
     if os.environ.get("GEMINI_API_KEY"):
         return LLMClient(provider="gemini", model="gemini-2.5-flash")
     elif os.environ.get("OPENROUTER_API_KEY"):
@@ -32,12 +36,13 @@ def get_llm() -> LLMClient | None:
     return None
 
 
-def run_cli(file_path: str, no_llm: bool = False):
+def run_cli(file_path: str, no_llm: bool = False,
+            provider: str | None = None, phi_model: str | None = None):
     """Run analysis in CLI mode."""
     print("🛡️  OpenTender + Counsel — Procurement Corruption Analyzer\n")
 
     # Initialize
-    llm = None if no_llm else get_llm()
+    llm = None if no_llm else get_llm(provider, phi_model)
     if not llm and not no_llm:
         print("⚠️  No API keys found. Running in rule-based mode (no LLM).")
         print("   Set GEMINI_API_KEY, OPENROUTER_API_KEY, or ANTHROPIC_API_KEY in .env\n")
@@ -47,6 +52,7 @@ def run_cli(file_path: str, no_llm: bool = False):
     scorer = RiskScorer()
     reporter = ReportGenerator()
     loader = JurisdictionLoader()
+    chunker = DocumentChunker()
 
     # Extract
     print(f"📄 Extracting: {file_path}")
@@ -96,8 +102,20 @@ def run_cli(file_path: str, no_llm: bool = False):
         if llm:
             lawyer = VirtualLawyer(loader, llm)
             from src.shared.models import CounselRequest
+
+            # Build RAG context from chunked document
+            chunks = chunker.chunk_text(tender.raw_text[:15000], source=tender.title)
+            rag_context = "\n\n---\n\n".join(
+                f"[chunk {c.chunk_id}] {c.text[:600]}"
+                for c in chunks[:8]
+            )
+            full_context = (
+                f"{tender.title}\n{report.summary}\n\n"
+                f"RELEVANT DOCUMENT EXCERPTS:\n{rag_context}"
+            )
+
             response = lawyer.counsel(CounselRequest(
-                tender_context=tender.title + "\n" + report.summary,
+                tender_context=full_context,
                 question=question,
                 jurisdiction=jurisdiction,
                 risk_report=report,
@@ -116,7 +134,7 @@ def run_cli(file_path: str, no_llm: bool = False):
             print("LLM required for counsel mode. Set API key and re-run.\n")
 
 
-def run_ui():
+def run_ui(provider: str | None = None, phi_model: str | None = None):
     """Launch the Gradio UI."""
     try:
         import gradio as gr
@@ -124,13 +142,14 @@ def run_ui():
         print("Gradio not installed. Run: pip install gradio")
         sys.exit(1)
 
-    llm = get_llm()
+    llm = get_llm(provider, phi_model)
     loader = JurisdictionLoader()
     extractor = TenderExtractor()
     parser = TenderParser(llm) if llm else None
     scorer = RiskScorer()
     reporter = ReportGenerator()
     lawyer = VirtualLawyer(loader, llm) if llm else VirtualLawyer(loader)
+    chunker = DocumentChunker()
 
     # UI state
     tender_cache = {}
@@ -178,9 +197,21 @@ def run_ui():
         report = tender_cache["report"]
         jurisdiction = tender_cache["jurisdiction"]
 
+        # Build RAG context from chunked document
+        raw = tender_cache.get("tender_text", "")
+        chunks = chunker.chunk_text(raw, source="uploaded_tender")
+        rag_context = "\n\n---\n\n".join(
+            f"[chunk {c.chunk_id}] {c.text[:600]}"
+            for c in chunks[:8]
+        )
+        full_context = (
+            f"{report.tender.title}\n{report.summary}\n\n"
+            f"RELEVANT DOCUMENT EXCERPTS:\n{rag_context}"
+        )
+
         from src.shared.models import CounselRequest
         request = CounselRequest(
-            tender_context=tender_cache.get("tender_text", ""),
+            tender_context=full_context,
             question=question,
             jurisdiction=jurisdiction,
             risk_report=report,
@@ -251,16 +282,22 @@ def main():
     parser.add_argument("--url", "-u", help="URL to tender document for CLI analysis")
     parser.add_argument("--no-llm", action="store_true", help="Skip LLM calls (rule-based only)")
     parser.add_argument("--ui", action="store_true", default=True, help="Launch Gradio UI (default)")
+    parser.add_argument("--provider", "-p", default=None,
+                        choices=["phi", "gemini", "anthropic", "openrouter"],
+                        help="LLM provider (default: auto-detect from env)")
+    parser.add_argument("--phi-model", default=None,
+                        help="Phi model name (default: microsoft/Phi-3-mini-4k-instruct)")
 
     args = parser.parse_args()
 
     if args.file:
-        run_cli(args.file, no_llm=args.no_llm)
+        run_cli(args.file, no_llm=args.no_llm, provider=args.provider,
+                phi_model=args.phi_model)
     elif args.url:
         print("URL extraction requires Gradio UI for interactive use. Launching UI...")
-        run_ui()
+        run_ui(provider=args.provider, phi_model=args.phi_model)
     else:
-        run_ui()
+        run_ui(provider=args.provider, phi_model=args.phi_model)
 
 
 if __name__ == "__main__":

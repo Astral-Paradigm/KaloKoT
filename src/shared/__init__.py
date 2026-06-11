@@ -4,3 +4,4 @@ from .models import (
     RiskReport, LegalArticle, CounselRequest, CounselResponse,
     ComplaintDraft,
 )
+from .chunker import DocumentChunker, DocumentChunk, ChunkEmbedder

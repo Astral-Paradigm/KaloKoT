@@ -22,3 +22,14 @@ pydantic>=2.0.0
 
 # Type hints (optional)
 typing-extensions>=4.9.0
+
+# =====================
+# Local LLM (Microsoft Phi)
+# =====================
+transformers>=4.40.0
+accelerate>=0.30.0
+sentencepiece>=0.2.0
+bitsandbytes>=0.43.0     # 4-bit quantization for Phi on GPU
+
+# Document chunking + RAG (optional)
+# sentence-transformers>=3.0.0   # uncomment for embedding-based RAG
