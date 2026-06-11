@@ -10,9 +10,9 @@ import requests
 from io import BytesIO
 from typing import Optional
 
-# ElevenLabs male voice IDs (deep, authoritative)
-# "Adam" — deep, authoritative male voice
-MALE_VOICE_ID = "pNInz6obpgDQGcFmaJgB"  # Adam (deep, authoritative)
+# ElevenLabs male voice IDs (natural, authoritative)
+# User-preferred voice — natural sounding
+MALE_VOICE_ID = "1SM7GgM6IMuvQlz2BwM3"
 
 ELEVENLABS_BASE = "https://api.elevenlabs.io/v1"
 
