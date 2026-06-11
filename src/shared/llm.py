@@ -25,6 +25,18 @@ class LLMClient:
 
     def __init__(self, provider: str = "gemini", model: Optional[str] = None,
                  quantize: Optional[str] = None):
+        # Try loading .env from project root
+        try:
+            from dotenv import load_dotenv
+            import sys
+            for p in (os.getcwd(), os.path.dirname(os.path.abspath(__file__)),
+                      os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")):
+                dotenv_path = os.path.join(p, ".env")
+                if os.path.isfile(dotenv_path):
+                    load_dotenv(dotenv_path)
+                    break
+        except ImportError:
+            pass
         self.provider = provider
         self.model = model
         self.quantize = quantize
@@ -54,12 +66,14 @@ class LLMClient:
 
         elif provider == "openrouter":
             self._setup_openrouter(model)
+        elif provider == "openai":
+            self._setup_openai(model)
         elif provider == "phi":
             self._setup_phi(model)
         else:
             raise ValueError(
                 f"Unknown provider: {provider}. "
-                f"Use gemini, anthropic, openrouter, or phi."
+                f"Use gemini, anthropic, openrouter, openai, or phi."
             )
 
     def _setup_openrouter(self, model: Optional[str] = None):
@@ -74,6 +88,23 @@ class LLMClient:
         self._api_key = api_key
         self._http_session = requests.Session()
         self.provider = "openrouter"
+
+    # ------------------------------------------------------------------
+    # OpenAI-compatible API (OpenAI, any OpenAI-compatible proxy)
+    # ------------------------------------------------------------------
+
+    def _setup_openai(self, model: Optional[str] = None):
+        """Configure the OpenAI client (works with any OpenAI-compatible endpoint)."""
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY not set. Set it in .env or pass via env var.")
+        self.model_name = model or os.environ.get("LLM_DEFAULT_MODEL", "gpt-4o-mini")
+        try:
+            from openai import OpenAI
+        except ImportError:
+            raise ImportError("openai not installed. Run: pip install openai")
+        self._openai_client = OpenAI(api_key=api_key)
+        self.provider = "openai"
 
     # ------------------------------------------------------------------
     # Microsoft Phi (local, transformers)
@@ -224,6 +255,18 @@ class LLMClient:
             )
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"]
+
+        elif self.provider == "openai":
+            resp = self._openai_client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            return resp.choices[0].message.content
 
         elif self.provider == "phi":
             combined = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt

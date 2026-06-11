@@ -328,19 +328,42 @@ class RiskScorer:
         return None
 
     def _check_missing_section(self, tender: TenderDocument) -> Optional[Tuple[FlaggedClause, RiskLevel]]:
-        """Check if evaluation criteria section is entirely missing."""
+        """Check if evaluation criteria section is entirely missing.
+
+        Falls back to raw text search if no sections were parsed (e.g.
+        when the LLM parser was skipped during testing).
+        """
         ev_sections = [s for s in tender.sections if s.section == TenderSection.EVALUATION_CRITERIA]
-        if not ev_sections:
-            return FlaggedClause(
-                red_flag_id="missing-evaluation-section",
-                label="No Evaluation Criteria Section",
-                severity=Severity.CRITICAL,
-                description="The tender document does not contain an evaluation criteria section.",
-                location="Entire document",
-                excerpt="No evaluation criteria section found",
-                suggestion="Every tender must publish clear evaluation criteria. This omission is a serious procedural violation.",
-            ), RiskLevel.RED
-        return None
+        if ev_sections:
+            return None
+
+        # Fallback: check raw text for evaluation criteria headers/keywords
+        raw_lower = tender.raw_text.lower()
+        eval_headers = [
+            r"section\s+\d+\s*[:\-–—]\s*evaluation",
+            r"evaluation criteria",
+            r"evaluation method",
+            r"marking scheme",
+            r"scoring method",
+            r"technical evaluation",
+            r"financial evaluation",
+            r"qbs\b", r"qcbs\b", r"lcb\b",
+            r"points?\s+system",
+            r"weighted\s+criteria",
+        ]
+        found_header = any(re.search(p, raw_lower) for p in eval_headers)
+        if found_header:
+            return None
+
+        return FlaggedClause(
+            red_flag_id="missing-evaluation-section",
+            label="No Evaluation Criteria Section",
+            severity=Severity.CRITICAL,
+            description="The tender document does not contain an evaluation criteria section.",
+            location="Entire document",
+            excerpt="No evaluation criteria section found",
+            suggestion="Every tender must publish clear evaluation criteria. This omission is a serious procedural violation.",
+        ), RiskLevel.RED
 
     def _check_emergency(self, tender: TenderDocument) -> Optional[Tuple[FlaggedClause, RiskLevel]]:
         """Check for emergency procurement signals."""

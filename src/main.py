@@ -12,7 +12,16 @@ import os
 import sys
 from pathlib import Path
 
-# Add project root to path
+# Load .env from project root
+try:
+    from dotenv import load_dotenv
+    dotenv_path = Path(__file__).resolve().parent.parent / ".env"
+    if dotenv_path.exists():
+        load_dotenv(dotenv_path)
+except ImportError:
+    pass
+
+# Ensure project root is in sys.path so imports work consistently
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.analyzer import TenderExtractor, TenderParser, RiskScorer, ReportGenerator
@@ -291,9 +300,10 @@ def main():
     parser.add_argument("--file", "-f", help="Path to tender PDF/txt file for CLI analysis")
     parser.add_argument("--url", "-u", help="URL to tender document for CLI analysis")
     parser.add_argument("--no-llm", action="store_true", help="Skip LLM calls (rule-based only)")
-    parser.add_argument("--ui", action="store_true", default=True, help="Launch Gradio UI (default)")
+    parser.add_argument("--ui", action="store_true", default=False, help="Launch Gradio UI")
+    parser.add_argument("--api", action="store_true", default=False, help="Launch FastAPI backend")
     parser.add_argument("--provider", "-p", default=None,
-                        choices=["phi", "gemini", "anthropic", "openrouter"],
+                        choices=["phi", "gemini", "anthropic", "openrouter", "openai"],
                         help="LLM provider (default: auto-detect from env)")
     parser.add_argument("--phi-model", default=None,
                         help="Phi model name (default: microsoft/Phi-3-mini-4k-instruct)")
@@ -303,10 +313,13 @@ def main():
     if args.file:
         run_cli(args.file, no_llm=args.no_llm, provider=args.provider,
                 phi_model=args.phi_model)
-    elif args.url:
-        print("URL extraction requires Gradio UI for interactive use. Launching UI...")
+    elif args.api:
+        from src.api import main as api_main
+        api_main()
+    elif args.ui:
         run_ui(provider=args.provider, phi_model=args.phi_model)
     else:
+        # Default: launch Gradio UI
         run_ui(provider=args.provider, phi_model=args.phi_model)
 
 

@@ -266,7 +266,9 @@ class TestReportGenerator:
 
 
 @pytest.mark.skipif(
-    not os.environ.get("GEMINI_API_KEY") and not os.environ.get("OPENROUTER_API_KEY"),
+    not os.environ.get("GEMINI_API_KEY")
+    and not os.environ.get("OPENROUTER_API_KEY")
+    and not os.environ.get("OPENAI_API_KEY"),
     reason="No LLM API key available; skipping parser integration test",
 )
 class TestAnalyzerIntegration:
