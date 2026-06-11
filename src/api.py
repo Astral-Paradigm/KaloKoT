@@ -41,6 +41,8 @@ from src.lawyer.drafting import DraftGenerator
 from src.lawyer.risk_assessment import WhistleblowerRiskAssessment
 from src.shared.jurisdiction import JurisdictionLoader
 from src.shared.llm import LLMClient
+from src.shared.chunking import chunk_constitution, get_all_parent_texts
+from src.shared.chroma_store import ChromaLegalStore
 from src.shared.models import (
     ComplaintDraft, CounselRequest, CounselResponse,
     JurisdictionCode, RiskReport, TenderDocument,
@@ -147,6 +149,25 @@ def _get_legal_search() -> LegalVectorSearch:
     return _instances["legal_search"]
 
 
+def _get_chroma_store() -> ChromaLegalStore:
+    if "chroma_store" not in _instances:
+        store = ChromaLegalStore()
+        # Auto-index the Constitution of Nepal
+        loader = _get_loader()
+        try:
+            import yaml
+            const_path = Path(__file__).resolve().parent.parent / "docs" / "legal" / "np_constitution.yaml"
+            if const_path.exists():
+                with open(const_path) as f:
+                    const_data = yaml.safe_load(f)
+                n = store.index_constitution(const_data)
+                print(f"  Indexed {n} constitution chunks")
+        except Exception as e:
+            print(f"  Constitution index: {e}")
+        _instances["chroma_store"] = store
+    return _instances["chroma_store"]
+
+
 # ── Helper: Build TenderDocument with optional jurisdiction hint ──────────────
 
 
@@ -180,6 +201,8 @@ async def root():
             "POST /risk-assessment": "Whistleblower personal risk assessment",
             "POST /legal-search": "Semantic search over legal knowledge base",
             "GET /jurisdictions": "List available legal jurisdictions",
+            "POST /constitution-search": "Semantic search over Constitution of Nepal (ChromaDB + parent-child)",
+            "GET /constitution-context": "Get full Constitution text for Gemini context caching",
             "GET /health": "Health check",
         },
     }
@@ -465,6 +488,65 @@ async def legal_search(
     searcher.index_jurisdiction(yaml_data)
     results = searcher.hybrid_search(query, top_k=top_k, threshold=threshold)
     return {"query": query, "jurisdiction": jurisdiction, "results": results}
+
+
+@app.post("/constitution-search", summary="Search Constitution of Nepal via ChromaDB")
+async def constitution_search(
+    query: str = Form(...),
+    top_k: int = Form(5),
+    resolve_parents: bool = Form(True),
+):
+    """Semantic search over the Constitution of Nepal using ChromaDB.
+
+    Uses Hierarchical/Parent-Child chunking:
+    - ChromaDB matches individual clauses (child chunks)
+    - When resolve_parents=True, returns the full Article text for context
+
+    The full constitution can also be pre-loaded into the LLM context
+    via the /constitution-context endpoint.
+    """
+    store = _get_chroma_store()
+    raw_results = store.search(query, top_k=top_k)
+
+    context = ""
+    if resolve_parents:
+        context = store.get_search_context(raw_results)
+
+    return {
+        "query": query,
+        "results": [
+            {
+                "clause_id": r["child_id"],
+                "clause_text": r["child_text"],
+                "score": r["score"],
+                "article_title": r.get("parent_title", ""),
+                "part_number": r.get("part_number", 0),
+                "part_title": r.get("part_title", ""),
+                "path": r.get("path", []),
+            }
+            for r in raw_results
+        ],
+        "parent_context_length": len(context),
+        "parent_context": context if resolve_parents else None,
+    }
+
+
+@app.get("/constitution-context", summary="Get full Constitution text for LLM context caching")
+async def constitution_context():
+    """Return the full Constitution of Nepal text for pre-loading into an LLM context window.
+
+    Use this with Gemini Context Caching: load this once into the LLM's
+    context window, then use /constitution-search only for supplementary
+    materials (gazettes, uploaded case PDFs).
+    """
+    store = _get_chroma_store()
+    return {
+        "document": "Constitution of Nepal 2015",
+        "total_chars": len(store.get_context_cache_text()),
+        "full_text": store.get_context_cache_text(),
+        "context_caching_supported": True,
+        "note": "Load this text into the LLM's system prompt or context cache once. Then use /constitution-search for additional supplementary documents.",
+    }
 
 
 # ── CLI Entry Point ───────────────────────────────────────────────────────────

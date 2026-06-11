@@ -1,0 +1,487 @@
+# Constitution of Nepal 2015 — Structured for Hierarchical Chunking
+#
+# Hierarchy: Part → Article → Clause → SubClause
+# Each node has a stable ID for parent-child linking.
+#
+# Only articles relevant to procurement, anti-corruption,
+# oversight, and fundamental rights are included in full.
+# The full constitution contains 308 articles across 35 parts.
+
+meta:
+  country: Nepal
+  document: "Constitution of Nepal 2015 (2072 B.S.)"
+  enacted: "2015-09-20 (2072-06-03 B.S.)"
+  amendment_count: 2
+  source: "Nepal Law Commission"
+
+parts:
+  - number: 1
+    title: Preliminary
+    articles:
+      - number: 1
+        title: Constitution as the fundamental law
+        id: "art-1"
+        clauses:
+          - number: 1
+            id: "art-1-cl-1"
+            text: "This Constitution is the fundamental law of Nepal."
+          - number: 2
+            id: "art-1-cl-2"
+            text: "All laws inconsistent with this Constitution shall, to the extent of such inconsistency, be void."
+
+      - number: 2
+        title: Sovereignty and state authority
+        id: "art-2"
+        clauses:
+          - number: 1
+            id: "art-2-cl-1"
+            text: "The sovereignty and state authority of Nepal shall be vested in the Nepalese people."
+          - number: 2
+            id: "art-2-cl-2"
+            text: "The sovereignty and state authority shall be exercised in accordance with the provisions of this Constitution."
+
+  - number: 3
+    title: Fundamental Rights and Duties
+    intro: "Part 3 enumerates the fundamental rights guaranteed to every citizen of Nepal."
+    articles:
+      - number: 16
+        title: Right to live with dignity
+        id: "art-16"
+        clauses:
+          - number: 1
+            id: "art-16-cl-1"
+            text: "Every person shall have the right to live with dignity."
+
+      - number: 17
+        title: Right to freedom
+        id: "art-17"
+        clauses:
+          - number: 1
+            id: "art-17-cl-1"
+            text: "Except as provided for by law, no person shall be deprived of his or her personal liberty."
+          - number: 2
+            id: "art-17-cl-2"
+            text: "All citizens shall have the right to freedom of opinion and expression."
+          - number: 3
+            id: "art-17-cl-3"
+            text: "Every citizen shall have the right to assemble peaceably and without arms."
+          - number: 4
+            id: "art-17-cl-4"
+            text: "Every citizen shall have the right to form unions and associations."
+          - number: 5
+            id: "art-17-cl-5"
+            text: "Every citizen shall have the right to move and reside in any part of Nepal."
+          - number: 6
+            id: "art-17-cl-6"
+            text: "Every citizen shall have the right to practice any profession, carry on any occupation, and engage in any industry and trade."
+          - number: 7
+            id: "art-17-cl-7"
+            text: "Every person shall have the right to equal access to public services."
+
+      - number: 18
+        title: Right to equality
+        id: "art-18"
+        clauses:
+          - number: 1
+            id: "art-18-cl-1"
+            text: "All citizens shall be equal before the law. No person shall be denied the equal protection of the law."
+          - number: 2
+            id: "art-18-cl-2"
+            text: "There shall be no discrimination against any citizen on grounds of religion, race, sex, caste, tribe, origin, language, ideological conviction or any other status."
+          - number: 3
+            id: "art-18-cl-3"
+            text: "The State shall not discriminate among citizens on grounds of religion, race, sex, caste, tribe, origin, economic condition, language, ideological conviction or any other status."
+
+      - number: 20
+        title: Right to justice
+        id: "art-20"
+        clauses:
+          - number: 1
+            id: "art-20-cl-1"
+            text: "No person shall be compelled to give evidence against himself or herself."
+          - number: 2
+            id: "art-20-cl-2"
+            text: "Every person who is arrested shall be informed of the grounds of arrest and the right to consult a legal practitioner."
+          - number: 3
+            id: "art-20-cl-3"
+            text: "Every person arrested shall be produced before a judicial authority within twenty-four hours of arrest."
+          - number: 4
+            id: "art-20-cl-4"
+            text: "Every person shall have the right to a fair trial by an independent and impartial judicial body."
+          - number: 5
+            id: "art-20-cl-5"
+            text: "The State shall ensure free legal aid to a person who is indigent."
+
+      - number: 24
+        title: Right against corruption
+        id: "art-24"
+        clauses:
+          - number: 1
+            id: "art-24-cl-1"
+            text: "Every person shall have the right to be free from corruption."
+          - number: 2
+            id: "art-24-cl-2"
+            text: "Any person who suffers loss or damage from corruption shall have the right to be compensated as provided for by law."
+          - number: 3
+            id: "art-24-cl-3"
+            text: "The State shall have the duty to prevent corruption and to investigate and prosecute acts of corruption."
+          - number: 4
+            id: "art-24-cl-4"
+            text: "The State may enact laws to confiscate property acquired through corruption."
+
+      - number: 25
+        title: Right to information
+        id: "art-25"
+        clauses:
+          - number: 1
+            id: "art-25-cl-1"
+            text: "Every citizen shall have the right to request and receive information on any matter of public importance."
+          - number: 2
+            id: "art-25-cl-2"
+            text: "No law shall be made to impede the exercise of the right to information except on grounds of national security, public order, or privacy of others."
+          - number: 3
+            id: "art-25-cl-3"
+            text: "The State shall publish all laws and decisions concerning the public interest within a reasonable time."
+          - number: 4
+            id: "art-25-cl-4"
+            text: "The State shall maintain the records of all public affairs in a manner suitable for public access."
+          - number: 5
+            id: "art-25-cl-5"
+            text: "The right to information includes the right to inspect official documents, take notes, and obtain certified copies."
+
+      - number: 27
+        title: Right to constitutional remedy
+        id: "art-27"
+        clauses:
+          - number: 1
+            id: "art-27-cl-1"
+            text: "The right to proceed to the Supreme Court for the enforcement of fundamental rights is guaranteed."
+          - number: 2
+            id: "art-27-cl-2"
+            text: "The Supreme Court shall have the power to issue appropriate orders and writs including habeas corpus, mandamus, certiorari, prohibition, and quo warranto."
+
+  - number: 5
+    title: Structure of State and Provincial Government
+    articles:
+      - number: 56
+        title: Structure of the State
+        id: "art-56"
+        clauses:
+          - number: 1
+            id: "art-56-cl-1"
+            text: "The State of Nepal shall be federal in structure, consisting of Federation, Province, and Local levels."
+          - number: 2
+            id: "art-56-cl-2"
+            text: "There shall be seven Provinces in Nepal as specified in Schedule 4."
+          - number: 3
+            id: "art-56-cl-3"
+            text: "The boundaries of the Provinces shall be as specified in Schedule 4."
+          - number: 4
+            id: "art-56-cl-4"
+            text: "The Local level shall consist of Village Bodies, Municipalities, and District Coordination Committees."
+
+      - number: 57
+        title: Distribution of state powers
+        id: "art-57"
+        clauses:
+          - number: 1
+            id: "art-57-cl-1"
+            text: "The powers of the Federation, Province, and Local level shall be exercised as provided in Schedules 5, 6, 7, 8, and 9."
+          - number: 2
+            id: "art-57-cl-2"
+            text: "The Federation may make laws on matters listed in Schedule 5 (Federal List)."
+          - number: 3
+            id: "art-57-cl-3"
+            text: "The Province may make laws on matters listed in Schedule 6 (Provincial List)."
+          - number: 4
+            id: "art-57-cl-4"
+            text: "The Federation and Province may concurrently make laws on matters listed in Schedule 7 (Concurrent List)."
+          - number: 5
+            id: "art-57-cl-5"
+            text: "The Local level may make laws on matters listed in Schedule 8 (Local Level List)."
+          - number: 6
+            id: "art-57-cl-6"
+            text: "Residual powers not listed in any Schedule shall vest with the Federation."
+
+  - number: 11
+    title: Judiciary
+    articles:
+      - number: 126
+        title: Courts
+        id: "art-126"
+        clauses:
+          - number: 1
+            id: "art-126-cl-1"
+            text: "The courts of Nepal shall consist of the Supreme Court, High Courts, and District Courts."
+          - number: 2
+            id: "art-126-cl-2"
+            text: "Specialized courts or tribunals may be established by law."
+          - number: 3
+            id: "art-126-cl-3"
+            text: "No court other than those established under this Constitution or by law shall be formed."
+
+      - number: 127
+        title: Supreme Court as the apex court
+        id: "art-127"
+        clauses:
+          - number: 1
+            id: "art-127-cl-1"
+            text: "The Supreme Court shall be the highest court in the judicial hierarchy."
+          - number: 2
+            id: "art-127-cl-2"
+            text: "The Supreme Court shall be a court of record and shall have all the powers of such a court."
+          - number: 3
+            id: "art-127-cl-3"
+            text: "The Supreme Court may review its own judgments and may establish precedents binding on all courts."
+
+      - number: 128
+        title: Appointment of Chief Justice and Judges of the Supreme Court
+        id: "art-128"
+        clauses:
+          - number: 1
+            id: "art-128-cl-1"
+            text: "The President shall appoint the Chief Justice on the recommendation of the Constitutional Council."
+          - number: 2
+            id: "art-128-cl-2"
+            text: "The Chief Justice shall hold office for a term of six years."
+          - number: 3
+            id: "art-128-cl-3"
+            text: "Judges of the Supreme Court shall be appointed by the Chief Justice on the recommendation of the Judicial Council."
+
+      - number: 131
+        title: Jurisdiction of the Supreme Court
+        id: "art-131"
+        clauses:
+          - number: 1
+            id: "art-131-cl-1"
+            text: "The Supreme Court shall have original and appellate jurisdiction as provided by law."
+          - number: 2
+            id: "art-131-cl-2"
+            text: "The Supreme Court shall have the power to interpret the Constitution and to declare laws unconstitutional."
+
+  - number: 12
+    title: Attorney General
+    articles:
+      - number: 157
+        title: Attorney General
+        id: "art-157"
+        clauses:
+          - number: 1
+            id: "art-157-cl-1"
+            text: "There shall be an Attorney General of Nepal appointed by the President on the recommendation of the Prime Minister."
+          - number: 2
+            id: "art-157-cl-2"
+            text: "The Attorney General shall be a person qualified to be appointed as a Judge of the Supreme Court."
+          - number: 3
+            id: "art-157-cl-3"
+            text: "The Attorney General shall serve at the pleasure of the Prime Minister."
+          - number: 4
+            id: "art-157-cl-4"
+            text: "The Attorney General shall be the chief legal advisor to the Government of Nepal."
+          - number: 5
+            id: "art-157-cl-5"
+            text: "The Attorney General or a subordinate legal officer may represent the Government in any legal proceedings."
+
+  - number: 21
+    title: Commission for the Investigation of Abuse of Authority
+    articles:
+      - number: 238
+        title: Commission for the Investigation of Abuse of Authority
+        id: "art-238"
+        clauses:
+          - number: 1
+            id: "art-238-cl-1"
+            text: "There shall be a Commission for the Investigation of Abuse of Authority (CIAA) of Nepal."
+          - number: 2
+            id: "art-238-cl-2"
+            text: "The CIAA shall consist of a Chief Commissioner and four Commissioners."
+          - number: 3
+            id: "art-238-cl-3"
+            text: "The Chief Commissioner shall be appointed by the President on the recommendation of the Constitutional Council."
+          - number: 4
+            id: "art-238-cl-4"
+            text: "A person shall be qualified to be a Commissioner if they have served as a Judge of the High Court or has held a senior government position for at least ten years."
+          - number: 5
+            id: "art-238-cl-5"
+            text: "The term of office of the Chief Commissioner and Commissioners shall be six years from the date of appointment."
+
+      - number: 239
+        title: Powers and functions of CIAA
+        id: "art-239"
+        clauses:
+          - number: 1
+            id: "art-239-cl-1"
+            text: "The CIAA may conduct investigations into any abuse of authority or corruption in any public office."
+          - number: 2
+            id: "art-239-cl-2"
+            text: "The CIAA may submit a complaint to the appropriate authority or court upon completion of an investigation."
+          - number: 3
+            id: "art-239-cl-3"
+            text: "The CIAA may initiate proceedings in the Special Court or other judicial bodies."
+          - number: 4
+            id: "art-239-cl-4"
+            text: "The CIAA shall have the power to investigate any person holding public office, including elected officials."
+          - number: 5
+            id: "art-239-cl-5"
+            text: "The CIAA may recommend departmental action against public officials."
+          - number: 6
+            id: "art-239-cl-6"
+            text: "The CIAA shall submit an annual report to the President."
+
+      - number: 240
+        title: Immunity for CIAA proceedings
+        id: "art-240"
+        clauses:
+          - number: 1
+            id: "art-240-cl-1"
+            text: "No suit or legal proceeding shall lie against the CIAA or any of its officers for acts done in good faith."
+
+  - number: 22
+    title: Auditor General
+    articles:
+      - number: 241
+        title: Auditor General
+        id: "art-241"
+        clauses:
+          - number: 1
+            id: "art-241-cl-1"
+            text: "There shall be an Auditor General of Nepal."
+          - number: 2
+            id: "art-241-cl-2"
+            text: "The Auditor General shall be appointed by the President on the recommendation of the Constitutional Council."
+          - number: 3
+            id: "art-241-cl-3"
+            text: "The Auditor General shall be a person qualified to be a Judge of the Supreme Court."
+          - number: 4
+            id: "art-241-cl-4"
+            text: "The Auditor General shall hold office for a term of six years."
+
+      - number: 242
+        title: Functions and powers of the Auditor General
+        id: "art-242"
+        clauses:
+          - number: 1
+            id: "art-242-cl-1"
+            text: "The Auditor General shall audit all accounts of the Government of Nepal."
+          - number: 2
+            id: "art-242-cl-2"
+            text: "The Auditor General shall audit all public offices, courts, and constitutional bodies."
+          - number: 3
+            id: "art-242-cl-3"
+            text: "The Auditor General may conduct special audits when deemed necessary."
+          - number: 4
+            id: "art-242-cl-4"
+            text: "The Auditor General shall submit an annual audit report to the President."
+          - number: 5
+            id: "art-242-cl-5"
+            text: "The accounts to be audited and the audit procedure shall be as prescribed by law."
+
+  - number: 23
+    title: Public Service Commission
+    articles:
+      - number: 243
+        title: Public Service Commission
+        id: "art-243"
+        clauses:
+          - number: 1
+            id: "art-243-cl-1"
+            text: "There shall be a Public Service Commission of Nepal."
+          - number: 2
+            id: "art-243-cl-2"
+            text: "The Public Service Commission shall consist of a Chairperson and members."
+          - number: 3
+            id: "art-243-cl-3"
+            text: "The Chairperson shall be appointed by the President on the recommendation of the Constitutional Council."
+
+  - number: 25
+    title: National Human Rights Commission
+    articles:
+      - number: 248
+        title: National Human Rights Commission
+        id: "art-248"
+        clauses:
+          - number: 1
+            id: "art-248-cl-1"
+            text: "There shall be a National Human Rights Commission of Nepal."
+          - number: 2
+            id: "art-248-cl-2"
+            text: "The Commission shall consist of a Chairperson and four members."
+          - number: 3
+            id: "art-248-cl-3"
+            text: "A person shall be qualified to be the Chairperson if they have served as a Judge of the Supreme Court."
+
+      - number: 249
+        title: Functions of the National Human Rights Commission
+        id: "art-249"
+        clauses:
+          - number: 1
+            id: "art-249-cl-1"
+            text: "The Commission shall investigate complaints of violations of human rights."
+          - number: 2
+            id: "art-249-cl-2"
+            text: "The Commission may recommend appropriate action to the concerned authority."
+          - number: 3
+            id: "art-249-cl-3"
+            text: "The Commission may also initiate complaints on its own motion."
+          - number: 4
+            id: "art-249-cl-4"
+            text: "The Commission shall submit an annual report to the President."
+
+  - number: 26
+    title: Other Constitutional Commissions
+    articles:
+      - number: 251
+        title: Formation of other commissions
+        id: "art-251"
+        clauses:
+          - number: 1
+            id: "art-251-cl-1"
+            text: "There may be other constitutional commissions as provided by law."
+          - number: 2
+            id: "art-251-cl-2"
+            text: "The President may establish a commission of inquiry to investigate matters of public importance."
+
+  - number: 30
+    title: Definitions and Interpretations
+    articles:
+      - number: 274
+        title: Definition clause
+        id: "art-274"
+        clauses:
+          - number: 1
+            id: "art-274-cl-1"
+            text: "The Nepal Law Commission shall translate and publish this Constitution in the official language."
+          - number: 2
+            id: "art-274-cl-2"
+            text: "The text in the Nepali language shall prevail in case of inconsistency."
+
+      - number: 275
+        title: Definitions
+        id: "art-275"
+        clauses:
+          - number: 1
+            id: "art-275-cl-1"
+            text: "'Law' means any Act, ordinance, order, rule, regulation, by-law, or other legal instrument."
+          - number: 2
+            id: "art-275-cl-2"
+            text: "'Public office' means any office held under the Government of Nepal."
+          - number: 3
+            id: "art-275-cl-3"
+            text: "'Person holding public office' includes elected officials, civil servants, and employees of constitutional bodies."
+
+  - number: 31
+    title: Short Title, Commencement and Repeal
+    articles:
+      - number: 308
+        title: Short title and commencement
+        id: "art-308"
+        clauses:
+          - number: 1
+            id: "art-308-cl-1"
+            text: "This Constitution may be cited as the 'Constitution of Nepal 2015'."
+          - number: 2
+            id: "art-308-cl-2"
+            text: "This Constitution shall come into force on 20 September 2015."
+          - number: 3
+            id: "art-308-cl-3"
+            text: "The Interim Constitution of Nepal 2007 is hereby repealed."

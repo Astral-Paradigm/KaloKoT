@@ -6,3 +6,5 @@ from .models import (
 )
 from .chunker import DocumentChunker, DocumentChunk, ChunkEmbedder
 from .vector_search import LegalVectorSearch, TfidfVectorizer
+from .chunking import chunk_constitution, resolve_parents, get_all_parent_texts
+from .chroma_store import ChromaLegalStore
