@@ -45,3 +45,5 @@ backups/
 
 # Config overrides
 **/local.*
+*.pyc
+__pycache__/

@@ -155,6 +155,51 @@ All frontend `/api/*` requests are proxied to the FastAPI backend during develop
 
 ---
 
+## LEGAL RAG ARCHITECTURE
+
+### Parent-Child Chunking (Implemented)
+
+Legal text is hierarchical — Part → Article → Clause → SubClause. Standard token-based chunking would break this structure, causing ChromaDB to retrieve fragments without full article context. The system uses **parent-child chunking**:
+
+```
+[Parent: Full Article 17 - Right to Freedom]
+      ├── [Child 1: Clause 1 (vectorized)]
+      ├── [Child 2: Clause 2 (vectorized)]
+      └── [Child 3: Clause 3 (vectorized)]
+```
+
+When a child chunk matches a query, the **full parent article** is passed to the LLM. This ensures Gemini never sees an orphaned clause fragment.
+
+### Two-Tier Retrieval Strategy
+
+| Tier | Store | Contents | Strategy |
+|------|-------|----------|----------|
+| **Static** | Gemini Context Cache | Constitution of Nepal 2015 (full text) | Pre-loaded at session start, cached for up to 2 hours. The constitution is ~40K tokens — well within Gemini's 1M-token context cache. |
+| **Dynamic** | ChromaDB | User-uploaded tender PDFs, gazettes (Rajpatra), supplementary laws, previous analyses | Vector search at query time. ChromaDB stores both the vectorized child chunks and the full parent text for context resolution. |
+
+**Flow:**
+1. User asks a question about procurement law
+2. System checks Gemini context cache for Constitution (static ground truth)
+3. System also queries ChromaDB for tender-specific content + supplementary laws
+4. Both contexts are merged and sent to the LLM for a grounded response
+5. Citations are returned with both article numbers and tender clause locations
+
+### Context Caching (Gemini)
+
+Gemini's context caching lets us pre-load the full constitution and keep it warm:
+- **Cache key:** hash of constitution YAML version
+- **TTL:** 2 hours (configurable)
+- **Hit rate expected:** >90% for constitutional queries
+- **Fallback:** When cache misses, re-load from ChromaDB `get_context_cache_text()`
+
+ChromaDB is NOT queried for static constitution lookups during cached sessions — only for new documents, tender PDFs, and supplementary laws. This reduces latency from ~500ms (ChromaDB search + parent resolution) to ~50ms (cache fetch).
+
+### Future Optimization: Hybrid Search
+
+For Phase 2, combine ChromaDB's semantic search with BM25 keyword search for legal terminology that vectors may miss (specific article numbers, Latin terms, Nepali legal phrases).
+
+---
+
 ## MVP Feature Set (Phase 1)
 
 1. **Upload PDF** → extract text → structured tender analysis (sections, budget, timeline, criteria)
@@ -163,11 +208,12 @@ All frontend `/api/*` requests are proxied to the FastAPI backend during develop
 4. **Semantic constitution search** — query returns matching clauses with parent article context and score
 5. **Browse full constitution text** — rendered as downloadable plain text
 6. **Digital Lawyer chat** — conversational legal advice grounded in constitution + LLM, with **ElevenLabs TTS** (deep male voice, speaker button per response)
-7. **Analysis Report mode** — describe an issue → structured legal analysis → **downloadable PDF** with KaloKoT branding
-8. **Complaint Drafting mode** — fill personal info + describe complaint → formal complaint letter → **downloadable PDF** with KaloKoT branding
-9. **Chat always available** — input bar persists across all three modes (Chat / Analysis / Complaint)
-10. **KaloKoT design** — dark noir/gold theme, LowPolyLawyer SVG mascot, glassmorphism panels, grain texture
-11. **Two reference jurisdictions** for MVP: Nepal (primary)
+7. **Tender Review mode** — upload PDF or paste text, get corruption risk heatmap + flagged clauses + section scores
+8. **Analysis Report mode** — describe an issue → structured legal analysis → **downloadable PDF** with KaloKoT branding
+9. **Complaint Drafting mode** — fill personal info + describe complaint → formal complaint letter → **downloadable PDF** with KaloKoT branding
+10. **Chat always available** — input bar persists across all four modes (Chat / Tender Review / Analysis / Complaint)
+11. **KaloKoT design** — dark noir/gold theme, LowPolyLawyer SVG mascot, glassmorphism panels, grain texture
+12. **Two reference jurisdictions** for MVP: Nepal (primary)
 
 ---
 
@@ -178,7 +224,7 @@ User lands on http://localhost:5173
     ↓
 Sees the Digital Lawyer mascot (left) and chat interface (right)
     ↓
-Mode tabs at top: [💬 Chat] [📋 Analysis] [⚖️ Complaint]
+Mode tabs at top: [💬 Chat] [📄 Tender Review] [📋 Analysis] [⚖️ Complaint]
     ↓
 ─── Chat Mode (default) ─────────────────────────────
 User types: "Is it illegal to have only 3 days for bids?"
@@ -200,6 +246,17 @@ Clicks "Draft Complaint Letter"
 LLM generates formal complaint letter grounded in law
     ↓
 "Download PDF" button appears → one click saves
+    ↓
+─── Tender Review Mode ──────────────────────────────
+User uploads a tender PDF (drag & drop or click)
+    ↓
+System extracts text → runs corruption risk analysis
+    ↓
+Results: Risk badge + Summary + Section scores + Flagged clauses
+    ↓
+User clicks "Discuss with Lawyer" → returns to Chat with context
+    ↓
+User switches to Analysis mode for a deep legal report
     ↓
 ─── Analysis Mode ───────────────────────────────────
 User describes: "A road contract awarded at 40% above market rate"
