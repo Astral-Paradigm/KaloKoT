@@ -47,3 +47,6 @@ backups/
 **/local.*
 *.pyc
 __pycache__/
+
+# Temp
+.env.tmp
