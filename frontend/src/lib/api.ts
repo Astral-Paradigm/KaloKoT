@@ -98,6 +98,19 @@ export interface LegalSearchResponse {
   context: string;
 }
 
+// ── Provider status ────────────────────────────────
+
+export interface ProvidersStatus {
+  providers: Record<string, boolean>;
+}
+
+/** Fetch LLM provider status (which APIs are configured from env vars). */
+export async function getProvidersStatus(): Promise<ProvidersStatus> {
+  const res = await fetchWithTimeout(`${API_BASE}/providers`);
+  if (!res.ok) throw new Error(`Providers fetch failed: ${res.status}`);
+  return res.json();
+}
+
 // ── Tender analysis ────────────────────────────────
 
 /** Upload a tender file (PDF / image / text) for corruption‑risk analysis. */
@@ -127,17 +140,63 @@ export async function getReport(reportId: string): Promise<unknown> {
   return res.json();
 }
 
+// ── Safe localStorage helpers (SSR‑safe) ──────────
+
+function ssrSafeGetItem(key: string): string | null {
+  if (typeof localStorage === "undefined") return null;
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+
+function ssrSafeSetItem(key: string, value: string): void {
+  if (typeof localStorage === "undefined") return;
+  try { localStorage.setItem(key, value); } catch { /* noop */ }
+}
+
 // ── Legal counsel (chat) ───────────────────────────
 
 /** Ask the Digital Lawyer a legal question (optionally scoped to a tender context). */
 export async function counselQuestion(
   req: CounselRequest,
+  provider?: string,
+  chat_history?: { role: string; text: string }[],
 ): Promise<CounselResponse> {
+  const stored = ssrSafeGetItem(`kalokot_api_key_${provider || "auto"}`);
   return formPost<CounselResponse>("/counsel", {
     question: req.question,
     tender_context: req.tender_context || "",
     jurisdiction: req.jurisdiction || "np",
+    provider: provider || "",
+    api_key: stored || "",
+    chat_history: chat_history ? JSON.stringify(chat_history) : "",
   });
+}
+
+// ── API key management ────────────────────────────
+
+/** Send an API key to the backend for the given provider and store locally. */
+export async function setApiKey(provider: string, key: string): Promise<void> {
+  ssrSafeSetItem(`kalokot_api_key_${provider}`, key);
+  await formPost<void>("/set-api-key", { provider, api_key: key });
+}
+
+/** Retrieve a stored API key for a provider from localStorage. */
+export function getStoredApiKey(provider: string): string | null {
+  return ssrSafeGetItem(`kalokot_api_key_${provider}`);
+}
+
+/** List all providers that have stored API keys. */
+export function getConfiguredProviders(): string[] {
+  if (typeof localStorage === "undefined") return [];
+  const prefixes: string[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith("kalokot_api_key_")) {
+        prefixes.push(key.replace("kalokot_api_key_", ""));
+      }
+    }
+  } catch { /* noop */ }
+  return prefixes;
 }
 
 // ── Constitution search ────────────────────────────

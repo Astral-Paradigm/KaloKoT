@@ -7,7 +7,7 @@
 /*
  * KaloKoT Design System — warm light mode
  * Palette: paper (#f5f3ee), ink (#2d2d2d), deep (#0d0d0d), gold (#c9a84c)
- * Typography: Libre Baskerville (serif), IBM Plex Sans (sans), IBM Plex Mono (mono)
+ * Typography: EB Garamond (serif), Lato (sans), IBM Plex Mono (mono)
  * Glass utility, noise grain, radial gold glow
  */
 
@@ -46,8 +46,8 @@
   --color-deep: var(--deep);
   --color-gold: var(--gold);
 
-  --font-serif: "Libre Baskerville", Georgia, ui-serif, serif;
-  --font-sans: "IBM Plex Sans", system-ui, ui-sans-serif, sans-serif;
+  --font-serif: "EB Garamond", Georgia, ui-serif, serif;
+  --font-sans: "Lato", system-ui, ui-sans-serif, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
@@ -224,4 +224,19 @@
 .card-hover:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 30px -8px rgba(13, 13, 13, 0.2);
+}
+
+/* Message slide-in */
+@keyframes message-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.message-bubble {
+  animation: message-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Thinking dot animation */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50%      { opacity: 1;   transform: scale(1.2); }
 }

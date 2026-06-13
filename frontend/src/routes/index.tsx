@@ -15,7 +15,9 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   ArrowUp, FileText, HelpCircle, AlertOctagon, BarChart3,
-  BookOpen, Circle,
+  BookOpen, Circle, KeyRound, Cpu,
+  User, Volume2, VolumeX, AlertTriangle, Download, Edit3,
+  MapPin, Lightbulb, MessageCircle, Loader2,
 } from "lucide-react";
 import mascot from "@/assets/mascot.png";
 import {
@@ -25,8 +27,20 @@ import {
   analyzeTenderText,
   draftComplaint,
   generateAnalysisReport,
+  getProvidersStatus,
+  setApiKey,
+  getStoredApiKey,
   type CounselResponse,
+  type ProvidersStatus,
 } from "@/lib/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 // ── Types ──────────────────────────────────────────
 
@@ -88,13 +102,23 @@ function severityIcon(sev: string): string {
 
 // ── Static data ────────────────────────────────────
 
+/** LLM provider options for the dropdown. */
+const providers: { value: string; label: string; keyRequired: boolean }[] = [
+  { value: "", label: "Auto", keyRequired: false },
+  { value: "gemini", label: "Gemini", keyRequired: true },
+  { value: "anthropic", label: "Claude", keyRequired: true },
+  { value: "openai", label: "OpenAI", keyRequired: true },
+  { value: "openrouter", label: "OpenRouter", keyRequired: true },
+  { value: "rule-based", label: "Default", keyRequired: false },
+];
+
 /** Sidebar navigation items. */
 const navItems: { label: string; icon: React.ComponentType<{ className?: string }>; mode: Mode }[] = [
   { label: "Tender", icon: FileText, mode: "tender" as Mode },
-  { label: "FAQ", icon: HelpCircle, mode: "chat" as Mode },
+  { label: "Counsel", icon: HelpCircle, mode: "chat" as Mode },
   { label: "Complaint", icon: AlertOctagon, mode: "complaint" as Mode },
   { label: "Analysis", icon: BarChart3, mode: "analysis" as Mode },
-  { label: "Constitution", icon: BookOpen, mode: "chat" as Mode }, // special: navigates to /constitution
+  { label: "Constitution", icon: BookOpen, mode: "chat" as Mode },
 ];
 
 /** Recent activity shown in sidebar. */
@@ -124,7 +148,12 @@ function HomePage() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-
+  const [aiProvider, setAiProvider] = useState("");
+  const [providersStatus, setProvidersStatus] = useState<ProvidersStatus | null>(null);
+  const [keyDialogOpen, setKeyDialogOpen] = useState(false);
+  const [keyDialogProvider, setKeyDialogProvider] = useState("");
+  const [keyInputValue, setKeyInputValue] = useState("");
+ 
   // ── TTS state ────────────────────────────────
   const [speakingId, setSpeakingId] = useState<number | null>(null);
   const [audioBlocked, setAudioBlocked] = useState(false);
@@ -167,6 +196,15 @@ function HomePage() {
     chatEnd.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  /** Fetch LLM provider status on mount. */
+  useEffect(() => {
+    getProvidersStatus()
+      .then(setProvidersStatus)
+      .catch(() => setProvidersStatus(null));
+  }, []);
+
+
+
   /** Prime the AudioContext on first user gesture (required by browsers). */
   useEffect(() => {
     const primeAudio = () => {
@@ -194,7 +232,7 @@ function HomePage() {
       const res: CounselResponse = await counselQuestion({
         question: q,
         tender_context: tenderContext,
-      });
+      }, aiProvider, messages);
       const answer = res.answer;
       setMessages((m) => [...m, { role: "lawyer", text: answer }]);
     } catch {
@@ -202,7 +240,7 @@ function HomePage() {
       setMessages((m) => [...m, { role: "lawyer", text: fallback }]);
     }
     setLoading(false);
-  }, [input, loading, tenderContext]);
+  }, [input, loading, tenderContext, aiProvider]);
 
   /** Read a lawyer message aloud via TTS. */
   const handleTts = useCallback(async (text: string, idx: number) => {
@@ -355,11 +393,89 @@ function HomePage() {
           </span>
         </div>
         <nav className="flex shrink-0 items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink/50 flex items-center gap-1">
+            <Cpu className="h-3 w-3" />
+            {aiProvider
+              ? providers?.find((p) => p.value === aiProvider)?.label ?? aiProvider
+              : "Auto"}
+          </span>
           <div className="h-8 w-8 shrink-0 rounded-full bg-deep text-paper grid place-items-center font-mono text-xs">
             K
           </div>
         </nav>
       </header>
+
+      {/* ── API Key Entry Dialog ── */}
+      <Dialog open={keyDialogOpen} onOpenChange={setKeyDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4" />
+              {keyDialogProvider
+                ? providers.find((p) => p.value === keyDialogProvider)?.label ?? keyDialogProvider
+                : ""}{" "}
+              API Key
+            </DialogTitle>
+            <DialogDescription>
+              Enter your API key for this provider. The key is stored locally in your browser
+              and sent securely with each request.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <input
+              type="password"
+              value={keyInputValue}
+              onChange={(e) => setKeyInputValue(e.target.value)}
+              placeholder={`Paste your ${keyDialogProvider ? providers.find((p) => p.value === keyDialogProvider)?.label ?? keyDialogProvider : ""} API key here...`}
+              className="w-full p-2.5 rounded-lg text-sm outline-none"
+              style={{
+                border: "1px solid color-mix(in oklab, var(--ink) 15%, transparent)",
+                background: "color-mix(in oklab, var(--paper-dark) 50%, transparent)",
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && keyInputValue.trim()) {
+                  setApiKey(keyDialogProvider, keyInputValue.trim());
+                  setAiProvider(keyDialogProvider);
+                  setKeyDialogOpen(false);
+                }
+              }}
+            />
+          </div>
+          <DialogFooter className="flex gap-2">
+            <button
+              onClick={() => setKeyDialogOpen(false)}
+              className="px-4 py-2 rounded-lg text-xs"
+              style={{
+                border: "1px solid color-mix(in oklab, var(--ink) 20%, transparent)",
+                color: "color-mix(in oklab, var(--ink) 55%, transparent)",
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                if (!keyInputValue.trim()) return;
+                await setApiKey(keyDialogProvider, keyInputValue.trim());
+                setAiProvider(keyDialogProvider);
+                setKeyDialogOpen(false);
+                // Refresh provider status
+                getProvidersStatus()
+                  .then(setProvidersStatus)
+                  .catch(() => {});
+              }}
+              disabled={!keyInputValue.trim()}
+              className="px-4 py-2 rounded-lg text-xs font-semibold transition"
+              style={{
+                background: keyInputValue.trim() ? "var(--gold)" : "color-mix(in oklab, var(--ink) 10%, transparent)",
+                color: keyInputValue.trim() ? "var(--paper)" : "color-mix(in oklab, var(--ink) 40%, transparent)",
+                cursor: keyInputValue.trim() ? "pointer" : "not-allowed",
+              }}
+            >
+              Save Key
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Two‑column layout ── */}
       <div className="mx-3 mt-3 flex gap-3" style={{ minHeight: "calc(100vh - 5rem)" }}>
@@ -380,9 +496,11 @@ function HomePage() {
                       }
                     }}
                     className={`group interactive flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
-                      mode === item.mode
-                        ? "bg-ink/8 text-deep font-medium"
-                        : "text-ink/75 hover:bg-paper-dark/60"
+                      item.label === "Constitution"
+                        ? "text-ink/75 hover:bg-paper-dark/60"
+                        : mode === item.mode
+                          ? "bg-ink/8 text-deep font-medium"
+                          : "text-ink/75 hover:bg-paper-dark/60"
                     }`}
                   >
                     <item.icon className="h-4 w-4" />
@@ -406,6 +524,8 @@ function HomePage() {
               ))}
             </ul>
           </div>
+
+
 
           {/* Live‑clerk indicator */}
           <div className="mt-4 flex items-center gap-2 rounded-xl border border-ink/10 px-3 py-2 bg-paper/40">
@@ -520,9 +640,9 @@ function HomePage() {
               {mode === "chat" && !isLanding && (
                 <div className="w-full max-w-3xl space-y-3">
                   {messages.map((msg, i) => (
-                    <div
-                      key={i}
-                      className="flex gap-2.5 items-start animate-fade-in"
+                      <div
+                        key={i}
+                        className="flex gap-2.5 items-start message-bubble"
                       style={{ flexDirection: msg.role === "user" ? "row-reverse" : "row" }}
                     >
                       {msg.role === "lawyer" && (
@@ -538,12 +658,12 @@ function HomePage() {
                       )}
                       {msg.role === "user" && (
                         <div
-                          className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs mt-1"
+                          className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center mt-1"
                           style={{
                             background: "color-mix(in oklab, var(--ink) 8%, transparent)",
                           }}
                         >
-                          👤
+                          <User className="h-4 w-4" style={{ color: "color-mix(in oklab, var(--ink) 50%, transparent)" }} />
                         </div>
                       )}
                       <div
@@ -576,7 +696,7 @@ function HomePage() {
                               }}
                               title={speakingId === i ? "Playing..." : "Read aloud"}
                             >
-                              {speakingId === i ? "🔊" : "🔈"} {speakingId === i ? "Playing..." : "Listen"}
+                              {speakingId === i ? <Volume2 className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />} {speakingId === i ? "Playing..." : "Listen"}
                             </button>
                             <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: "color-mix(in oklab, var(--ink) 35%, transparent)" }}>
                               KaloKoT AI
@@ -614,7 +734,7 @@ function HomePage() {
                     border: "1px solid color-mix(in oklab, var(--gold) 20%, transparent)",
                   }}
                 >
-                  <span>🔇</span>
+                  <VolumeX className="h-3 w-3 shrink-0" />
                   <span>Click any button to enable audio playback</span>
                   <button
                     onClick={() => { new Audio(); setAudioBlocked(false); }}
@@ -637,7 +757,7 @@ function HomePage() {
                     border: "1px solid color-mix(in oklab, var(--gold) 20%, transparent)",
                   }}
                 >
-                  <span>⚠️</span>
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
                   <span>{ttsError}</span>
                   <button
                     onClick={() => setTtsError(null)}
@@ -677,7 +797,7 @@ function HomePage() {
                           style={{ display: "none" }}
                           onChange={handleFileChange}
                         />
-                        <div className="text-3xl mb-2">📄</div>
+                        <FileText className="h-10 w-10 mb-2 mx-auto" style={{ color: "color-mix(in oklab, var(--gold) 60%, transparent)" }} />
                         <div className="font-semibold mb-1 text-sm">Upload a tender document (PDF, TXT, HTML, Images)</div>
                         <div className="text-xs" style={{ color: "color-mix(in oklab, var(--ink) 50%, transparent)" }}>
                           Drag & drop or click to browse
@@ -743,7 +863,7 @@ function HomePage() {
                       }}
                     >
                       <div className="flex items-center gap-2 mb-1">
-                        <span>⚠️</span>
+                        <AlertTriangle className="h-4 w-4" style={{ color: "#c0392b" }} />
                         <span className="font-semibold text-sm">Analysis Failed</span>
                       </div>
                       <div className="text-xs" style={{ color: "color-mix(in oklab, var(--ink) 65%, transparent)" }}>
@@ -843,8 +963,8 @@ function HomePage() {
                               </span>
                             </div>
                             {clause.location && (
-                              <div className="text-xs mb-1" style={{ color: "color-mix(in oklab, var(--ink) 50%, transparent)" }}>
-                                📍 {clause.location}
+                              <div className="flex items-center gap-1 text-xs mb-1" style={{ color: "color-mix(in oklab, var(--ink) 50%, transparent)" }}>
+                                <MapPin className="h-3 w-3 shrink-0" /> {clause.location}
                               </div>
                             )}
                             <div className="text-xs mb-1.5">{clause.description}</div>
@@ -857,7 +977,7 @@ function HomePage() {
                                   color: "color-mix(in oklab, var(--ink) 85%, transparent)",
                                 }}
                               >
-                                ⚠️ <strong>Why this matters:</strong> {clause.risk_reason}
+                                <AlertTriangle className="h-3 w-3 inline-block mr-1 shrink-0" /> <strong>Why this matters:</strong> {clause.risk_reason}
                               </div>
                             )}
                             {clause.suggestion && (
@@ -869,7 +989,7 @@ function HomePage() {
                                   border: "1px solid color-mix(in oklab, var(--gold) 15%, transparent)",
                                 }}
                               >
-                                💡 {clause.suggestion}
+                                <Lightbulb className="h-3 w-3 inline-block mr-1 shrink-0" /> {clause.suggestion}
                               </div>
                             )}
                           </div>
@@ -886,7 +1006,7 @@ function HomePage() {
                           color: "var(--gold)",
                         }}
                       >
-                        💬 Discuss this with the Digital Lawyer
+                        <MessageCircle className="h-4 w-4 inline-block mr-1.5" />Discuss this with the Digital Lawyer
                       </button>
                       <button
                         onClick={() => { setAnalysisResult(null); setUploadedFileName(""); setPasteText(""); setAnalysisError(null); }}
@@ -946,7 +1066,7 @@ function HomePage() {
                         color: "var(--gold)",
                       }}
                     >
-                      ⬇ Download Analysis Report (PDF)
+                      <Download className="h-4 w-4 inline-block mr-1.5" />Download Analysis Report (PDF)
                     </button>
                   )}
                 </div>
@@ -1007,7 +1127,7 @@ function HomePage() {
                       cursor: !complaintForm.description.trim() || draftingComplaint ? "not-allowed" : "pointer",
                     }}
                   >
-                    {draftingComplaint ? "Drafting..." : "📝 Draft Complaint Letter"}
+                    {draftingComplaint ? "Drafting..." : <><Edit3 className="h-4 w-4 inline-block mr-1.5" />Draft Complaint Letter</>}
                   </button>
 
                   {complaintPdf && (
@@ -1020,7 +1140,7 @@ function HomePage() {
                         color: "var(--gold)",
                       }}
                     >
-                      ⬇ Download Complaint Letter (PDF)
+                      <Download className="h-4 w-4 inline-block mr-1.5" />Download Complaint Letter (PDF)
                     </button>
                   )}
                 </div>
@@ -1031,8 +1151,34 @@ function HomePage() {
             <div className="w-full max-w-2xl animate-slide-up delay-500">
               <form
                 onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
-                className="glass flex items-center gap-2 rounded-full pl-5 pr-1.5 py-1.5"
+                className="glass flex items-center gap-1 rounded-full pl-3 pr-1.5 py-1.5 transition-all duration-200 focus-within:shadow-[0_0_0_2px_rgba(201,168,76,0.3)]"
               >
+                <select
+                  value={aiProvider}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const prov = providers.find((p) => p.value === val);
+                    if (!val || !prov) { setAiProvider(val || ""); return; }
+                    if (!prov.keyRequired) { setAiProvider(val); return; }
+                    if (getStoredApiKey(val)) { setAiProvider(val); return; }
+                    if (providersStatus?.providers?.[val]) { setAiProvider(val); return; }
+                    setKeyDialogProvider(val);
+                    setKeyInputValue("");
+                    setKeyDialogOpen(true);
+                  }}
+                  className="shrink-0 bg-transparent text-[12px] font-mono outline-none cursor-pointer mr-1 font-bold tracking-wider px-1.5 py-0.5 rounded"
+                  style={{
+                    color: aiProvider
+                      ? "var(--gold)"
+                      : "color-mix(in oklab, var(--ink) 45%, transparent)",
+                  }}
+                >
+                  {providers.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
                 <input
                   ref={inputRef}
                   value={input}
@@ -1045,8 +1191,11 @@ function HomePage() {
                   type="submit"
                   aria-label="Send"
                   disabled={!input.trim() || loading}
-                  className="grid h-10 w-10 place-items-center rounded-full text-paper transition hover:bg-ink disabled:opacity-40"
-                  style={{ background: input.trim() ? "var(--gold)" : "var(--deep)" }}
+                  className="grid h-10 w-10 place-items-center rounded-full text-paper transition-all duration-200 disabled:opacity-40 active:scale-90"
+                  style={{
+                    background: input.trim() ? "var(--gold)" : "var(--deep)",
+                    boxShadow: input.trim() ? "0 0 12px rgba(201,168,76,0.3)" : "none",
+                  }}
                 >
                   <ArrowUp className="h-4 w-4" />
                 </button>

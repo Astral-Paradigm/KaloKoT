@@ -31,13 +31,13 @@ class JurisdictionLoader:
 
         path = self.legal_dir / f"{code}.yaml"
         if not path.exists():
-            raise FileNotFoundError(f"Legal corpus not found: {path}")
+            raise FileNotFoundError(f"Legal corpus not found: {code}")
 
-        with open(path, "r", encoding="utf-8") as f:
-            try:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
-            except yaml.YAMLError as e:
-                raise ValueError(f"Invalid YAML in {path}: {e}") from e
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid YAML in jurisdiction {code}") from e
         self._cache[code] = data
         return data
 

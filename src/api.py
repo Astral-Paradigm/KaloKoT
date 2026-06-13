@@ -12,6 +12,7 @@ Run with:
 from __future__ import annotations
 
 import io
+import json
 import os
 import sys
 import uuid
@@ -80,7 +81,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=os.environ.get("CORS_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080,http://localhost:8000").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -92,6 +93,8 @@ app.add_middleware(
 _instances: dict = {}  # Holds lazy-init'd clients (loader, scorer, llm, lawyer, ...)
 _report_cache: Dict[str, RiskReport] = {}  # In-memory store for generated risk reports (keyed by short UUID)
 
+
+# ── Startup ────────────────────────────────────────────────────────────────────
 
 def _get_loader() -> JurisdictionLoader:
     if "loader" not in _instances:
@@ -117,8 +120,15 @@ def _get_reporter() -> ReportGenerator:
     return _instances["reporter"]
 
 
-def _get_llm() -> LLMClient | FallbackLLMClient | None:
-    """Lazy-init an LLMClient using the unified factory."""
+def _get_llm(provider: Optional[str] = None) -> LLMClient | FallbackLLMClient | None:
+    """Get or create an LLMClient using the unified factory.
+
+    If a provider is specified, create a new client for that provider.
+    Falls back to pre-loaded Phi model for backup when primary is unavailable.
+    Otherwise return the cached default client.
+    """
+    if provider:
+        return create_llm_client(provider=provider)
     if "llm" not in _instances:
         _instances["llm"] = create_llm_client()
     return _instances["llm"]
@@ -126,15 +136,23 @@ def _get_llm() -> LLMClient | FallbackLLMClient | None:
 
 def _resolve_jurisdiction(jurisdiction: str) -> JurisdictionCode:
     """Resolve a jurisdiction string to JurisdictionCode enum."""
-    jcode = JurisdictionCode.UNKNOWN
+    j = jurisdiction.strip().lower()
+    if j in ("unknown", ""):
+        return JurisdictionCode.NEPAL
     for code in JurisdictionCode:
-        if code.value == jurisdiction.lower():
-            jcode = code
-            break
-    return jcode
+        if code.value == j or code.name.lower() == j:
+            return code
+    return JurisdictionCode.NEPAL
 
 
-def _get_lawyer() -> VirtualLawyer:
+def _get_lawyer(provider: Optional[str] = None) -> VirtualLawyer:
+    """Get or create a VirtualLawyer.
+
+    If a provider is specified, create a new lawyer with that LLM provider.
+    Otherwise return the cached default lawyer.
+    """
+    if provider:
+        return VirtualLawyer(_get_loader(), _get_llm(provider=provider))
     if "lawyer" not in _instances:
         _instances["lawyer"] = VirtualLawyer(_get_loader(), _get_llm())
     return _instances["lawyer"]
@@ -239,6 +257,19 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/providers", summary="List available LLM providers and their status")
+async def list_providers():
+    """Return status of all LLM providers (configured, Phi loading state)."""
+    return {
+        "providers": {
+            "gemini": bool(os.environ.get("GEMINI_API_KEY")),
+            "anthropic": bool(os.environ.get("ANTHROPIC_API_KEY")),
+            "openai": bool(os.environ.get("OPENAI_API_KEY")),
+            "openrouter": bool(os.environ.get("OPENROUTER_API_KEY")),
+        },
+    }
+
+
 @app.get("/jurisdictions")
 async def list_jurisdictions():
     """List all available legal knowledge base jurisdictions."""
@@ -265,6 +296,26 @@ async def list_jurisdictions():
 
 # ── Tender Analysis ──
 
+_MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20 MB
+
+_IMAGE_MAGIC_PREFIXES = {
+    b"\xff\xd8\xff": "image/jpeg",
+    b"\x89PNG": "image/png",
+    b"GIF87a": "image/gif",
+    b"GIF89a": "image/gif",
+    b"RIFF": "image/webp",
+    b"BM": "image/bmp",
+}
+
+
+def _validate_image_magic(data: bytes) -> None:
+    header = data[:16]
+    for magic in _IMAGE_MAGIC_PREFIXES:
+        if header.startswith(magic):
+            return
+    raise HTTPException(status_code=400, detail="File content does not match image type")
+
+
 @app.post("/analyze", summary="Upload a tender file for analysis")
 @limiter.limit("20/minute")
 async def analyze_file(request: Request, file: UploadFile = File(...)):
@@ -275,15 +326,20 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
     - Images: JPEG, PNG, GIF, WebP (text extracted via Gemini vision OCR)
     """
     raw = await file.read()
+    if len(raw) > _MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail="File too large — max 20 MB")
+
     content_type = file.content_type or ""
     filename = (file.filename or "").lower()
+    ext = Path(filename).suffix.lower()
 
     # Detect image by MIME type or extension — images require Gemini OCR for text extraction
     image_mimes = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"}
     image_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
-    ext = Path(filename).suffix.lower()
 
     if content_type in image_mimes or ext in image_exts:
+        # Verify magic bytes match the claimed image type
+        _validate_image_magic(raw)
         # Map extension to MIME for Gemini
         mime_map = {
             ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -295,8 +351,10 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
             if not llm:
                 raise HTTPException(status_code=502, detail="LLM not configured — set GEMINI_API_KEY in .env")
             text = llm.extract_text_from_image(raw, mime_type=mime_map.get(ext, "image/png"))
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"OCR extraction failed: {e}")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=500, detail="OCR extraction failed")
     else:
         # Treat as plain text — decode with fallback for non-UTF-8 bytes
         text = raw.decode("utf-8", errors="replace")
@@ -304,7 +362,7 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
     # Run the core analysis pipeline (extract → score → RiskReport)
     report = _analyze_text(text, title=filename or "Uploaded Tender")
     # Generate a short unique ID so the report can be retrieved later
-    report_id = uuid.uuid4().hex[:12]
+    report_id = uuid.uuid4().hex
     _report_cache[report_id] = report
 
     return {
@@ -332,7 +390,7 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
 async def analyze_text(request: Request, text: str = Form(...), title: str = Form("Uploaded Tender")):
     """Submit tender document text directly and get a corruption risk analysis."""
     report = _analyze_text(text, title=title)
-    report_id = uuid.uuid4().hex[:12]
+    report_id = uuid.uuid4().hex
     _report_cache[report_id] = report
 
     return {
@@ -385,6 +443,35 @@ async def get_report(report_id: str):
     }
 
 
+# ── API Key Management ──
+
+
+@app.post("/set-api-key", summary="Store an API key for a provider in the server cache")
+@limiter.limit("60/minute")
+async def set_api_key(
+    request: Request,
+    provider: str = Form(...),
+    api_key: str = Form(...),
+):
+    """Store a provider API key in the server's memory cache for the session duration."""
+    _instances[f"api_key_{provider}"] = api_key
+    logger.info(f"API key stored for provider: {provider}")
+    return {"status": "ok", "provider": provider}
+
+
+def _get_llm_with_key(provider: str, api_key: Optional[str] = None) -> LLMClient | FallbackLLMClient | None:
+    """Create an LLM client using a provided API key or fall back to auto-detect."""
+    if not provider:
+        return _get_llm()
+
+    effective_key = api_key or _instances.get(f"api_key_{provider}") or os.environ.get(f"{provider.upper()}_API_KEY")
+
+    if effective_key:
+        return create_llm_client(provider=provider, api_key=effective_key)
+
+    return None
+
+
 # ── Legal Counsel ──
 
 @app.post("/counsel", summary="Ask the Virtual Lawyer a question")
@@ -395,10 +482,24 @@ async def counsel(
     tender_context: str = Form(""),
     jurisdiction: str = Form("unknown"),
     report_id: Optional[str] = Form(None),
+    provider: Optional[str] = Form(None),
+    api_key: Optional[str] = Form(None),
+    chat_history: Optional[str] = Form(""),
 ):
     """Ask the Virtual Lawyer about a tender's legal implications."""
     loader = _get_loader()
-    lawyer = _get_lawyer()
+
+    # Use the new key-aware LLM getter
+    llm = _get_llm_with_key(provider or "", api_key=api_key)
+    if llm:
+        lawyer = VirtualLawyer(loader, llm)
+    else:
+        if provider and provider not in ("none", "rule", "rule-based"):
+            return {"answer": f"The {provider} provider is not configured. Set the API key in the provider selector or in .env.", "citations": [], "suggested_actions": [], "disclaimer": "", "template_name": None}
+        if provider == "rule-based":
+            lawyer = VirtualLawyer(loader, None)
+        else:
+            lawyer = _get_lawyer()
 
     # Resolve jurisdiction string to enum
     jcode = _resolve_jurisdiction(jurisdiction)
@@ -426,8 +527,21 @@ async def counsel(
         jurisdiction=jcode,
     )
 
-    # Pass constitution context to the lawyer
-    response = lawyer.counsel(counsel_req, constitution_context=constitution_context)
+    # Parse chat history JSON if provided
+    parsed_history: list[dict] = []
+    if chat_history:
+        try:
+            parsed_history = json.loads(chat_history)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Pass constitution context and chat history to the lawyer
+    try:
+        response = lawyer.counsel(counsel_req, constitution_context=constitution_context, chat_history=parsed_history)
+    except Exception:
+        logger.warning("LLM counsel failed (quota/rate-limit), falling back to rule-based")
+        fallback = VirtualLawyer(loader, None)
+        response = fallback.counsel(counsel_req, constitution_context=constitution_context, chat_history=parsed_history)
     return {
         "answer": response.answer,
         "citations": [
@@ -668,8 +782,8 @@ async def text_to_speech(request: Request, text: str = Form(...)):
 
 
 @app.post("/draft-complaint", summary="Draft a formal complaint letter and return PDF")
-async def draft_complaint(
-    name: str = Form(...),
+@limiter.limit("10/minute")
+async def draft_complaint(request: Request, name: str = Form(...),
     permanent_address: str = Form(...),
     temporary_address: str = Form(...),
     citizenship_no: str = Form(...),
@@ -812,7 +926,7 @@ async def draft_complaint(
             complaint_date=complaint_date,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"PDF generation failed: {e}")
+        raise HTTPException(status_code=500, detail="PDF generation failed")
 
     from fastapi.responses import StreamingResponse
     return StreamingResponse(
@@ -826,9 +940,8 @@ async def draft_complaint(
 
 
 @app.post("/analysis-report", summary="Generate a legal analysis report and return PDF")
-async def analysis_report(
-    issue: str = Form(...),
-):
+@limiter.limit("10/minute")
+async def analysis_report(request: Request, issue: str = Form(...),):
     """Generate a legal analysis report based on a described issue, return as PDF.
 
     The LLM analyzes the issue against Nepali law (including constitution)
@@ -877,7 +990,7 @@ async def analysis_report(
             analysis_text=analysis,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"PDF generation failed: {e}")
+        raise HTTPException(status_code=500, detail="PDF generation failed")
 
     from fastapi.responses import StreamingResponse
     return StreamingResponse(

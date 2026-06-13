@@ -12,7 +12,7 @@ PyYAML==6.0.3
 requests==2.34.2
 
 # LLM providers (install at least one)
-google-generativeai==0.8.6       # Gemini (recommended for structured output)
+google-genai>=0.3.0              # Gemini (recommended for structured output)
 anthropic==0.109.1               # Anthropic Claude
 openai==2.41.1                   # OpenAI / OpenRouter
 

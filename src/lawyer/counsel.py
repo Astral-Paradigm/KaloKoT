@@ -90,7 +90,8 @@ class VirtualLawyer:
         self.risk = WhistleblowerRiskAssessment()
 
     def counsel(self, request: CounselRequest,
-                constitution_context: str = "") -> CounselResponse:
+                constitution_context: str = "",
+                chat_history: Optional[list[dict]] = None) -> CounselResponse:
         """Process a counsel request and return a complete response.
 
         Pipeline:
@@ -105,6 +106,7 @@ class VirtualLawyer:
         Args:
             request: Counsel request containing question, tender context, risk report.
             constitution_context: Optional Nepali Constitution article text.
+            chat_history: Previous conversation messages [{role, text}, ...].
 
         Returns:
             A CounselResponse with answer text, citations, actions, and disclaimer.
@@ -112,7 +114,6 @@ class VirtualLawyer:
         # ── 1. Resolve jurisdiction ────────────────────────────────────────
         jurisdiction = request.jurisdiction
         if jurisdiction == JurisdictionCode.UNKNOWN:
-            # Try to infer jurisdiction from tender text content
             detected = self.loader.detect_jurisdiction_from_text(request.tender_context)
             if detected != JurisdictionCode.UNKNOWN:
                 jurisdiction = detected
@@ -133,9 +134,17 @@ class VirtualLawyer:
         ]
         wants_draft = any(phrase in request.question.lower() for phrase in draft_phrases)
 
-        # ── 5. Generate answer ─────────────────────────────────────────────
+        # ── 5. Build chat history context ──────────────────────────────────
+        chat_context = ""
+        if chat_history:
+            lines = []
+            for msg in chat_history[-8:]:
+                label = "User" if msg.get("role") == "user" else "Lawyer"
+                lines.append(f"{label}: {msg.get('text', '')[:500]}")
+            chat_context = "\n".join(lines)
+
+        # ── 6. Generate answer ─────────────────────────────────────────────
         if self.llm:
-            # Build structured context for the LLM prompt
             legal_context = self._build_legal_context(jurisdiction, legal_articles)
             risk_context = self._build_risk_context(request)
 
@@ -145,6 +154,8 @@ class VirtualLawyer:
                 f"Legal Context:\n{legal_context}\n\n"
                 + (f"Constitution of Nepal (relevant articles):\n{constitution_context[:4000]}\n\n"
                     if constitution_context else "")
+                + (f"Conversation History:\n{chat_context}\n\n"
+                    if chat_context else "")
                 + f"User Question: {request.question}\n\n"
                 f"Jurisdiction: {jurisdiction.value}\n\n"
             )
@@ -163,7 +174,6 @@ class VirtualLawyer:
                 max_tokens=4096,
             )
         else:
-            # No LLM client — fall back to structured template-based answer
             answer = self._rule_based_response(request, jurisdiction, legal_articles)
 
         # ── 6. Generate draft if the user asked for one ────────────────────

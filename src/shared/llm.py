@@ -43,7 +43,7 @@ class LLMClient:
     """Unified LLM client that can switch between providers."""
 
     def __init__(self, provider: str = "gemini", model: Optional[str] = None,
-                 quantize: Optional[str] = None):
+                 quantize: Optional[str] = None, api_key: Optional[str] = None):
         # Try loading .env from project root
         try:
             from dotenv import load_dotenv
@@ -61,34 +61,34 @@ class LLMClient:
         self.quantize = quantize
 
         if provider == "gemini":
-            api_key = os.environ.get("GEMINI_API_KEY")
-            if not api_key:
+            key = api_key or os.environ.get("GEMINI_API_KEY")
+            if not key:
                 raise ValueError(
                     "GEMINI_API_KEY not set. Set it in .env or pass via env var."
                 )
             if not HAS_GEMINI:
                 raise ImportError("google-genai not installed. Run: pip install google-genai")
             self._gemini_client = genai.Client(
-                api_key=api_key,
+                api_key=key,
                 http_options={"timeout": 120_000},  # 120s — generous for multi-page analysis
             )
             self.model_name = model or "gemini-2.5-flash"
 
         elif provider == "anthropic":
-            api_key = os.environ.get("ANTHROPIC_API_KEY")
-            if not api_key:
+            key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+            if not key:
                 raise ValueError("ANTHROPIC_API_KEY not set.")
             try:
                 import anthropic
             except ImportError:
                 raise ImportError("anthropic not installed. Run: pip install anthropic")
             self.model_name = model or "claude-sonnet-4-20250514"
-            self.client = anthropic.Anthropic(api_key=api_key)
+            self.client = anthropic.Anthropic(api_key=key)
 
         elif provider == "openrouter":
-            self._setup_openrouter(model)
+            self._setup_openrouter(model, api_key=api_key)
         elif provider == "openai":
-            self._setup_openai(model)
+            self._setup_openai(model, api_key=api_key)
         elif provider == "phi":
             self._setup_phi(model)
         else:
@@ -97,16 +97,16 @@ class LLMClient:
                 f"Use gemini, anthropic, openrouter, openai, or phi."
             )
 
-    def _setup_openrouter(self, model: Optional[str] = None):
+    def _setup_openrouter(self, model: Optional[str] = None, api_key: Optional[str] = None):
         self.model_name = model or "anthropic/claude-sonnet-4"
-        api_key = os.environ.get("OPENROUTER_API_KEY")
-        if not api_key:
+        key = api_key or os.environ.get("OPENROUTER_API_KEY")
+        if not key:
             raise ValueError("OPENROUTER_API_KEY not set.")
         try:
             import requests
         except ImportError:
             raise ImportError("requests not installed.")
-        self._api_key = api_key
+        self._api_key = key
         self._http_session = requests.Session()
         self.provider = "openrouter"
 
@@ -114,17 +114,17 @@ class LLMClient:
     # OpenAI-compatible API (OpenAI, any OpenAI-compatible proxy)
     # ------------------------------------------------------------------
 
-    def _setup_openai(self, model: Optional[str] = None):
+    def _setup_openai(self, model: Optional[str] = None, api_key: Optional[str] = None):
         """Configure the OpenAI client (works with any OpenAI-compatible endpoint)."""
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
+        key = api_key or os.environ.get("OPENAI_API_KEY")
+        if not key:
             raise ValueError("OPENAI_API_KEY not set. Set it in .env or pass via env var.")
         self.model_name = model or os.environ.get("LLM_DEFAULT_MODEL", "gpt-4o-mini")
         try:
             from openai import OpenAI
         except ImportError:
             raise ImportError("openai not installed. Run: pip install openai")
-        self._openai_client = OpenAI(api_key=api_key)
+        self._openai_client = OpenAI(api_key=key)
         self.provider = "openai"
 
     # ------------------------------------------------------------------
@@ -154,7 +154,7 @@ class LLMClient:
             "low_cpu_mem_usage": True,
         }
 
-        quant = self.quantize or os.environ.get("PHI_QUANTIZE", "4bit")
+        quant = self.quantize or os.environ.get("PHI_QUANTIZE", "")
         if quant == "4bit":
             try:
                 from transformers import BitsAndBytesConfig
@@ -165,7 +165,6 @@ class LLMClient:
                     bnb_4bit_quant_type="nf4",
                 )
             except ImportError:
-                print("  [phi] bitsandbytes not available — falling back to 8-bit via PyTorch")
                 load_kwargs["torch_dtype"] = torch.float16
         elif quant == "8bit":
             try:
@@ -412,6 +411,8 @@ class FallbackLLMClient:
                     self._clients[p] = LLMClient(provider="anthropic", model=self.model or "claude-sonnet-4-20250514")
                 elif p == "openai" and os.environ.get("OPENAI_API_KEY"):
                     self._clients[p] = LLMClient(provider="openai", model=self.model or "gpt-4o-mini")
+                elif p == "phi":
+                    self._clients[p] = LLMClient(provider="phi", model=self.phi_model or _DEFAULT_PHI_MODEL)
             except Exception as e:
                 print(f"[FallbackLLM] Failed to initialize {p}: {e}")
 
@@ -511,6 +512,7 @@ def create_llm_client(
     provider: Optional[str] = None,
     model: Optional[str] = None,
     phi_model: Optional[str] = None,
+    api_key: Optional[str] = None,
 ) -> Optional[LLMClient]:
     """Create an LLMClient by trying providers in a consistent priority order.
 
@@ -530,6 +532,7 @@ def create_llm_client(
         provider: Explicit provider name to use (overrides env var).
         model: Model name for non-Phi providers.
         phi_model: Model name for Phi provider.
+        api_key: Optional API key. Passed directly to LLMClient instead of env var.
 
     Returns:
         LLMClient instance or None if no provider can be initialized.
@@ -538,14 +541,22 @@ def create_llm_client(
     if provider:
         if provider == "phi":
             return LLMClient(provider="phi", model=phi_model)
-        if provider == "openai" and os.environ.get("OPENAI_API_KEY"):
-            return LLMClient(provider="openai", model=model or "gpt-4o-mini")
-        if provider == "gemini" and os.environ.get("GEMINI_API_KEY"):
-            return LLMClient(provider="gemini", model=model or "gemini-2.5-flash")
-        if provider == "openrouter" and os.environ.get("OPENROUTER_API_KEY"):
-            return LLMClient(provider="openrouter", model=model or "anthropic/claude-sonnet-4")
-        if provider == "anthropic" and os.environ.get("ANTHROPIC_API_KEY"):
-            return LLMClient(provider="anthropic", model=model or "claude-sonnet-4-20250514")
+        if provider == "openai":
+            if api_key or os.environ.get("OPENAI_API_KEY"):
+                return LLMClient(provider="openai", model=model or "gpt-4o-mini", api_key=api_key)
+            return None
+        if provider == "gemini":
+            if api_key or os.environ.get("GEMINI_API_KEY"):
+                return LLMClient(provider="gemini", model=model or "gemini-2.5-flash", api_key=api_key)
+            return None
+        if provider == "openrouter":
+            if api_key or os.environ.get("OPENROUTER_API_KEY"):
+                return LLMClient(provider="openrouter", model=model or "anthropic/claude-sonnet-4", api_key=api_key)
+            return None
+        if provider == "anthropic":
+            if api_key or os.environ.get("ANTHROPIC_API_KEY"):
+                return LLMClient(provider="anthropic", model=model or "claude-sonnet-4-20250514", api_key=api_key)
+            return None
         # Explicit provider requested but key missing
         return None
 

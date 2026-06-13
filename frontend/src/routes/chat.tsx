@@ -49,6 +49,7 @@ function ChatPage() {
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [mascotState, setMascotState] = useState<"idle" | "speaking">("idle");
+  const [aiProvider, setAiProvider] = useState("");
 
   // ── Refs ───────────────────────────────────────
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -77,7 +78,7 @@ function ChatPage() {
           question: q,
           jurisdiction: "NEPAL",
           tender_context: "General legal inquiry about Nepali law.",
-        });
+        }, aiProvider);
         answer = resp.answer;
       } catch {
         // Fallback when backend is not running
@@ -129,6 +130,29 @@ function ChatPage() {
         >
           Digital Lawyer
         </span>
+        {/* AI Provider selector */}
+        <div className="flex items-center gap-1.5">
+          {[
+            { value: "phi", label: "Phi", note: "🚀" },
+            { value: "", label: "Auto" },
+            { value: "gemini", label: "Gemini" },
+            { value: "anthropic", label: "Claude" },
+            { value: "openai", label: "OpenAI" },
+          ].map((p) => (
+            <button
+              key={p.value}
+              onClick={() => setAiProvider(p.value)}
+              className={`rounded-md px-2 py-1 text-[10px] font-mono tracking-wider uppercase transition ${
+                aiProvider === p.value
+                  ? "bg-[color:var(--gold)]/20 text-[color:var(--gold)] border border-[color:var(--gold)]/40"
+                  : "text-muted-ink border border-transparent hover:text-cream hover:bg-white/5"
+              }`}
+            >
+              {p.label}
+              {p.note && <span className="ml-0.5 text-[9px] text-green-400/80">{p.note}</span>}
+            </button>
+          ))}
+        </div>
         <Link
           to="/analysis-report"
           className="inline-flex items-center gap-2 text-xs tracking-[0.24em] uppercase transition-colors hover:text-[color:var(--gold)]"
