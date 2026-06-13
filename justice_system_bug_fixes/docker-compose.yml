@@ -1,0 +1,34 @@
+services:
+  justice:
+    build: .
+    container_name: justice
+    restart: unless-stopped
+    ports:
+      - "${JUSTICE_PORT:-7860}:7860"
+    volumes:
+      - justice_data:/data
+      - justice_logs:/logs
+      - justice_uploads:/uploads
+      - ./docs/legal:/app/docs/legal:ro
+    environment:
+      - LOG_FILE=/logs/justice.log
+      - LEGAL_DIR=/app/docs/legal
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7860/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - justice_net
+
+volumes:
+  justice_data:
+  justice_logs:
+  justice_uploads:
+
+networks:
+  justice_net:

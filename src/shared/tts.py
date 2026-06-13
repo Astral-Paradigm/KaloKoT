@@ -129,12 +129,12 @@ def speak_text(
         buf.seek(0)
         return buf
 
-    # 2. Fetch from ElevenLabs
+    # 2. Fetch from ElevenLabs (retry once on transient errors)
+    import logging, time as _time
     headers = {"xi-api-key": key}
-
     payload = {
         "text": text,
-        "model_id": "eleven_turbo_v2",  # fastest ElevenLabs model
+        "model_id": "eleven_turbo_v2",
         "voice_settings": {
             "stability": stability,
             "similarity_boost": similarity_boost,
@@ -142,32 +142,42 @@ def speak_text(
             "use_speaker_boost": True,
         },
     }
-
-    try:
-        resp = _session.post(
-            f"{ELEVENLABS_BASE}/text-to-speech/{voice_id}",
-            headers=headers,
-            json=payload,
-            timeout=15,  # shorter timeout — fail fast
-        )
-        resp.raise_for_status()
+    for attempt in range(2):
+        try:
+            resp = _session.post(
+                f"{ELEVENLABS_BASE}/text-to-speech/{voice_id}",
+                headers=headers,
+                json=payload,
+                timeout=15,
+            )
+            if resp.status_code != 200:
+                logging.error(f"[TTS] ElevenLabs HTTP {resp.status_code}: {resp.text[:200]}")
+                if resp.status_code in (429, 503, 500) and attempt == 0:
+                    _time.sleep(1.5)
+                    continue
+                return None
+            resp.raise_for_status()
+        except Exception:
+            if attempt == 0:
+                _time.sleep(1.5)
+                continue
+            return None
 
         # Validate response: must be audio/mpeg and at least 1KB
         content_type = resp.headers.get("Content-Type", "")
         if "audio/mpeg" not in content_type:
             return None
         raw = resp.content
-        if len(raw) < 1024:  # minimum 1KB for valid MP3
+        if len(raw) < 1024:
             return None
 
         # 3. Cache the raw bytes
         _tts_cache.put(text, raw)
-
         buf = BytesIO(raw)
         buf.seek(0)
         return buf
-    except Exception:
-        return None
+
+    return None
 
 
 # ── Pre-warm ──────────────────────────────────────────────────────────────

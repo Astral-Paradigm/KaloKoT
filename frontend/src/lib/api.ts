@@ -136,7 +136,7 @@ export async function counselQuestion(
   return formPost<CounselResponse>("/counsel", {
     question: req.question,
     tender_context: req.tender_context || "",
-    jurisdiction: req.jurisdiction || "unknown",
+    jurisdiction: req.jurisdiction || "np",
   });
 }
 
