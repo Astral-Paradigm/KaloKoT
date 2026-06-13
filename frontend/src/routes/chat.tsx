@@ -91,7 +91,7 @@ function ChatPage() {
       <Backdrop />
 
       {/* Top bar */}
-      <header className="relative z-20 flex items-center justify-between px-6 py-4">
+      <header className="relative z-20 flex items-center justify-between px-4 py-3 md:px-6 md:py-4">
         <Link
           to="/"
           className="inline-flex items-center gap-2 text-xs tracking-[0.24em] uppercase transition-colors hover:text-[color:var(--gold)]"
@@ -119,7 +119,7 @@ function ChatPage() {
       {/* Chat area */}
       <div className="relative z-10 flex flex-1 flex-col overflow-hidden">
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 md:px-8">
+        <div className="flex-1 overflow-y-auto px-3 py-3 md:px-8 md:py-4">
           <div className="mx-auto max-w-3xl space-y-4">
             {messages.map((msg, i) => (
               <div
@@ -205,7 +205,7 @@ function ChatPage() {
 
         {/* Input bar */}
         <div
-          className="relative z-10 border-t px-4 py-4 md:px-8"
+          className="relative z-10 border-t px-3 py-3 md:px-8 md:py-4"
           style={{ borderColor: "color-mix(in oklab, white 8%, transparent)" }}
         >
           <div className="mx-auto flex max-w-3xl items-center gap-3">
@@ -243,10 +243,10 @@ function ChatPage() {
       </div>
 
       {/* Mascot — floating bottom-right */}
-      <div className="pointer-events-none fixed bottom-24 right-6 z-30 md:bottom-28 md:right-10">
+      <div className="pointer-events-none fixed bottom-20 right-4 z-30 md:bottom-28 md:right-10">
         <LowPolyLawyer
           state={mascotState}
-          className="h-24 w-auto opacity-40 drop-shadow-[0_10px_30px_rgba(0,0,0,0.6)] md:h-32"
+          className="h-16 w-auto opacity-30 drop-shadow-[0_10px_30px_rgba(0,0,0,0.6)] md:h-32 md:opacity-40"
         />
       </div>
     </main>

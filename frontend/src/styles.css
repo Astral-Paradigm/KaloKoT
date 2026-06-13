@@ -113,6 +113,13 @@
   }
 }
 
-/* ---------- Lawyer animations removed for now ---------- */
+/* ---------- Hide scrollbar on mobile tab rows ---------- */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
 

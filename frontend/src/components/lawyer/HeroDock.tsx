@@ -25,7 +25,7 @@ export function HeroDock({ onActiveChange }: Props) {
 
   return (
     <div
-      className="pointer-events-auto w-full max-w-[720px] px-4"
+      className="pointer-events-auto w-full max-w-full px-3 md:max-w-[720px] md:px-4"
       onDragOver={(e) => {
         e.preventDefault();
         setDragOver(true);
