@@ -1,11 +1,17 @@
-"""Virtual Lawyer — the main counsel engine."""
+"""Virtual Lawyer — the main counsel engine for KaloKoT.
+
+Orchestrates legal counsel by combining jurisdiction-specific legal context,
+AI-generated (LLM) or rule-based responses, compliance risk analysis, complaint
+draft generation, and evidence checklists.  All public methods are consumed by
+the FastAPI layer in src/api.py.
+"""
 
 from __future__ import annotations
 
 from typing import Optional
 
 from ..shared.models import (
-    CounselRequest, CounselResponse, JurisdictionCode, LegalArticle,
+    CounselRequest, CounselResponse, JurisdictionCode,
 )
 from ..shared.llm import LLMClient
 from ..shared.jurisdiction import JurisdictionLoader
@@ -16,48 +22,66 @@ from .evidence import EvidenceChecklist
 from .risk_assessment import WhistleblowerRiskAssessment
 
 
-COUNSEL_SYSTEM_PROMPT = """You are a Digital Lawyer for KaloKoT — a legal AI assistant for Nepal. You explain all legal matters in simple, everyday Nepali-friendly English. No legalese — speak like a helpful friend who knows the law.
+# ── LLM system prompt ──────────────────────────────────────────────────────
+
+COUNSEL_SYSTEM_PROMPT = """You are the Digital Lawyer persona of KaloKoT — an AI legal companion for everyday Nepali citizens. You talk like a wise, friendly chamber judge who uses simple, clear language. You NEVER use legalese, and ALWAYS speak in short paragraphs.
+
+CORE RULE — OUTPUT FORMAT:
+- Always give a SHORT SUMMARY (3-5 sentences max) on first response
+- Use **bold section titles** (markdown-style) to organize information
+- Write in clean, easy English that a common person understands
+- You are the mascot persona — warm, reassuring, like a wise owl in a robe
+- Only give more detail if the user says "tell me more" or asks for specifics
+
+**LANGUAGE RULE — CITATIONS IN NEPALI:**
+When you cite or quote articles from the Constitution of Nepal, you MUST present them in **Nepali (Devanagari script)** alongside the English translation. The constitution text provided in context is in Nepali — use it directly.
+
+Format for citations:
+> **Article 16 (अनुच्छेद १६)** — Right to Live with Dignity (गरिमापूर्ण जीवनको अधिकार)
+> "प्रत्येक व्यक्तिको गरिमापूर्ण जीवनको अधिकार हुनेछ।" (Every person shall have the right to live with dignity.)
 
 YOUR KNOWLEDGE:
-You are well-versed in ALL areas of Nepali law, including but not limited to:
-1. Constitutional Rights (Constitution of Nepal 2072) — fundamental rights, directive principles
-2. Consumer Rights — Consumer Protection Act 2075, right to quality goods, refunds, compensation
-3. Corporate & Employment Law — Labour Act 2074, hiring policies, termination, wages, workplace safety, Social Security Act
-4. Criminal Law — Muluki Ain (National Code), criminal procedure
-5. Property & Land Law — Land Act 2021, tenancy, inheritance
-6. Procurement & Anti-Corruption — Public Procurement Act 2063, CIAA, corruption prevention
-7. Family Law — marriage, divorce, child custody under the Muluki Ain
-8. Company Registration & Business — Companies Act 2063, sole proprietorship, partnerships
-9. Banking & Finance — Nepal Rastra Bank acts, loan regulations, digital banking
-10. Cyber Law — Electronic Transactions Act 2063, cybercrime
-11. Tax Law — Income Tax Act 2058, VAT, business registration
-12. Environmental Law — Environment Protection Act 2076
-13. Education & Health Law — policies on education rights, health services
-14. RTI & Transparency — Right to Information Act 2064
+You are well-versed in ALL areas of Nepali law, including:
+1. **Constitutional Rights** — Constitution of Nepal 2072, fundamental rights
+2. **Consumer Rights** — Consumer Protection Act 2075, right to quality goods
+3. **Corporate & Employment Law** — Labour Act 2074, wages, workplace safety
+4. **Criminal Law** — Muluki Ain (National Code)
+5. **Property & Land Law** — Land Act 2021, tenancy, inheritance
+6. **Procurement & Anti-Corruption** — Public Procurement Act 2063, CIAA
+7. **Family Law** — marriage, divorce, child custody
+8. **Cyber Law** — Electronic Transactions Act 2063
+9. **Tax & Banking** — Income Tax Act 2058, Nepal Rastra Bank
+10. **RTI & Transparency** — Right to Information Act 2064
 
-YOUR ROLE:
-1. Answer legal questions about ANY area of Nepali law
-2. Cite specific laws, acts, and sections when relevant
-3. Explain what the user can do — in plain steps
-4. Help draft complaints, legal notices, RTI requests, consumer claims
-5. Provide practical guidance on legal procedures, filing cases, and remedies
+HOW TO STRUCTURE YOUR ANSWER:
+**Summary** → (1-2 sentences on the core answer)
+**Your Rights** → (brief explanation in plain terms)
+**What You Can Do** → (1-2 specific actions, offices to visit, forms to file)
 
 ALWAYS:
-- Start simply: "According to Nepali law…" or "Under the Consumer Protection Act 2075…"
-- If a specific act exists, mention it by name and section
-- If you don't know the exact law, say so — never make up legal citations
-- Be practical: tell users exactly what steps to take, which forms to file, which office to visit
-- Keep answers conversational and clear
-- End with a helpful offer like "Would you like me to draft a legal notice?" or "Should I explain the procedure step by step?"
-- Adjust language for the user — use simpler terms for general users, more precise terms if needed
+- Start simply: "According to Nepali law..."
+- If you don't know, say so — never make up legal citations
+- Keep it SHORT — 150 words or fewer unless asked for more
+- End with one useful offer like "Want me to draft a complaint letter?"
 
-You have access to legal context from the Constitution of Nepal and other laws. Base your answers on that context when available. If the context is empty, rely on your training knowledge of Nepali law rather than guessing."""
-
+You have access to legal context from the Constitution of Nepal. Base answers on that context when available.
+"""
 
 class VirtualLawyer:
-    """The Virtual Lawyer engine — handles counsel requests and generates responses."""
+    """The Virtual Lawyer engine — handles counsel requests and generates responses.
+
+    Flows through jurisdiction resolution → legal context retrieval →
+    LLM or template-based response → optional draft generation → action
+    extraction.  Every public method is consumed by the FastAPI server.
+    """
 
     def __init__(self, loader: JurisdictionLoader, llm: Optional[LLMClient] = None):
+        """Initialise the Virtual Lawyer with jurisdiction data and an optional LLM client.
+
+        Args:
+            loader: Jurisdiction loader providing legal corpus, red-flag data, templates.
+            llm: Optional LLM client.  When None, rule-based fallback responses are used.
+        """
         self.loader = loader
         self.llm = llm
         self.query_engine = LegalQueryEngine(loader)
@@ -67,33 +91,51 @@ class VirtualLawyer:
 
     def counsel(self, request: CounselRequest,
                 constitution_context: str = "") -> CounselResponse:
-        """Process a counsel request and return a response."""
-        # 1. Resolve jurisdiction
+        """Process a counsel request and return a complete response.
+
+        Pipeline:
+          1. Resolve jurisdiction  (auto-detect if UNKNOWN)
+          2. Query legal articles  (keyword-based relevance from the red-flag corpus)
+          3. Append jurisdiction-specific disclaimer
+          4. Detect whether the user wants a complaint *draft*
+          5. Generate answer  (LLM-driven or rule-based fallback)
+          6. If draft requested, append draft document body
+          7. Extract up to 8 suggested actions from legal articles
+
+        Args:
+            request: Counsel request containing question, tender context, risk report.
+            constitution_context: Optional Nepali Constitution article text.
+
+        Returns:
+            A CounselResponse with answer text, citations, actions, and disclaimer.
+        """
+        # ── 1. Resolve jurisdiction ────────────────────────────────────────
         jurisdiction = request.jurisdiction
         if jurisdiction == JurisdictionCode.UNKNOWN:
-            # Try to detect from tender text
+            # Try to infer jurisdiction from tender text content
             detected = self.loader.detect_jurisdiction_from_text(request.tender_context)
             if detected != JurisdictionCode.UNKNOWN:
                 jurisdiction = detected
 
-        # 2. Get legal context
+        # ── 2. Retrieve relevant legal articles (keyword-matched) ──────────
         legal_articles = self.query_engine.find_relevant_articles(
             jurisdiction, request.question
         )
 
-        # 3. Get disclaimer
+        # ── 3. Disclaimer ──────────────────────────────────────────────────
         disclaimer = get_disclaimer(jurisdiction)
 
-        # 4. Check if user is asking for a complaint draft
-        wants_draft = any(phrase in request.question.lower() for phrase in [
+        # ── 4. Detect whether user wants a complaint / RTI draft ───────────
+        draft_phrases = [
             "draft", "write a complaint", "generate complaint", "file a report",
             "write a letter", "complaint letter", "rti request", "foia",
             "bikin laporan", "buat pengaduan", "surat", "模板", "起草",
-        ])
+        ]
+        wants_draft = any(phrase in request.question.lower() for phrase in draft_phrases)
 
-        # 5. Generate response
+        # ── 5. Generate answer ─────────────────────────────────────────────
         if self.llm:
-            # Build context for LLM
+            # Build structured context for the LLM prompt
             legal_context = self._build_legal_context(jurisdiction, legal_articles)
             risk_context = self._build_risk_context(request)
 
@@ -121,10 +163,10 @@ class VirtualLawyer:
                 max_tokens=4096,
             )
         else:
-            # No LLM — rule-based response
+            # No LLM client — fall back to structured template-based answer
             answer = self._rule_based_response(request, jurisdiction, legal_articles)
 
-        # 6. Generate draft if requested
+        # ── 6. Generate draft if the user asked for one ────────────────────
         template_name = None
         template_content = None
         if wants_draft:
@@ -134,7 +176,7 @@ class VirtualLawyer:
             answer += f"\n\n{'='*60}\nDRAFT DOCUMENT\n{'='*60}\n\n{draft.body}"
             answer += f"\n\n{draft.instructions}"
 
-        # 7. Extract suggested actions
+        # ── 7. Extract suggested actionable steps ──────────────────────────
         suggested_actions = self._extract_actions(jurisdiction, legal_articles)
 
         return CounselResponse(
@@ -148,7 +190,18 @@ class VirtualLawyer:
 
     def _build_legal_context(self, jurisdiction: JurisdictionCode,
                              articles: list) -> str:
-        """Build a condensed legal context for LLM prompt."""
+        """Build a condensed legal-context string to inject into the LLM prompt.
+
+        If no articles matched, falls back to the full jurisdiction legal
+        context from the loader (truncated at 4 000 characters).
+
+        Args:
+            jurisdiction: The resolved jurisdiction code.
+            articles: Relevant legal articles from the query engine.
+
+        Returns:
+            Formatted text block of laws, penalties and report templates.
+        """
         if not articles:
             context = self.loader.build_legal_context(jurisdiction)
             if len(context) > 4000:
@@ -168,7 +221,17 @@ class VirtualLawyer:
         return "\n".join(lines)
 
     def _build_risk_context(self, request: CounselRequest) -> str:
-        """Build risk summary for LLM context."""
+        """Build a condensed risk-analysis string for the LLM prompt.
+
+        Summarises the overall risk level and top 5 flagged clauses (with
+        severity) from the optional risk report attached to the request.
+
+        Args:
+            request: The counsel request, possibly containing a risk report.
+
+        Returns:
+            Text block describing risks, or a short "none available" message.
+        """
         if not request.risk_report:
             return "No risk analysis available."
 
@@ -187,8 +250,20 @@ class VirtualLawyer:
     def _rule_based_response(self, request: CounselRequest,
                               jurisdiction: JurisdictionCode,
                               articles: list) -> str:
-        """Fallback response when no LLM is available."""
-        # Provide a structured, template-based answer
+        """Fallback answer when no LLM client is available.
+
+        Produces a structured, template-based answer that describes the
+        jurisdiction, lists matching legal provisions with penalties and
+        actions, and enumerates suggested next steps.
+
+        Args:
+            request: The original counsel request (used only for context).
+            jurisdiction: The resolved jurisdiction.
+            articles: Legal articles matched against the question.
+
+        Returns:
+            Plain-text answer string.
+        """
         parts = []
 
         if jurisdiction == JurisdictionCode.UNKNOWN:
@@ -226,10 +301,21 @@ class VirtualLawyer:
 
     def _extract_actions(self, jurisdiction: JurisdictionCode,
                          articles: list) -> list:
-        """Extract actionable steps from legal articles."""
+        """Extract up to 8 actionable steps from legal articles and oversight metadata.
+
+        Collects oversight-body reporting channels and article-specific
+        actions (file complaints, pursue templates).  Deduplicates via a set.
+
+        Args:
+            jurisdiction: The resolved jurisdiction.
+            articles: Relevant legal articles.
+
+        Returns:
+            List of action-description strings (max 8).
+        """
         actions = set()
 
-        # Add oversight body info
+        # Add oversight-body reporting channels from jurisdiction metadata
         try:
             meta = self.loader.get_meta(jurisdiction)
             for body in meta.get("oversight_bodies", []):
@@ -246,4 +332,4 @@ class VirtualLawyer:
             if art.report_template:
                 actions.add(f"Use the '{art.report_template}' template to file a formal complaint")
 
-        return list(actions)[:8]  # Limit to top 8
+        return list(actions)[:8]  # Cap at 8 items

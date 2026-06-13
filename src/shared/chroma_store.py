@@ -20,9 +20,13 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional, TypedDict
 
+import logging
+import atexit
+import signal
 import chromadb
 from chromadb.config import Settings
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+from chromadb.errors import NotFoundError, ChromaError
 
 from .chunking import (
     Chunk,
@@ -31,6 +35,9 @@ from .chunking import (
     get_all_parent_texts,
     resolve_parents,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class SearchResult(TypedDict, total=False):
@@ -62,7 +69,7 @@ class ChromaLegalStore:
     ):
         if persist_dir is None:
             persist_dir = str(
-                Path.home() / ".justice_system" / "chroma_db"
+                Path.home() / ".justice_chromadb"
             )
         os.makedirs(persist_dir, exist_ok=True)
 
@@ -75,7 +82,7 @@ class ChromaLegalStore:
         # Reuse existing collection if present, otherwise create
         try:
             self._collection = self._client.get_collection(collection_name)
-        except Exception:
+        except NotFoundError:
             self._collection = self._client.create_collection(
                 name=collection_name,
                 metadata={"hnsw:space": "cosine"},
@@ -92,6 +99,32 @@ class ChromaLegalStore:
         # is available via get_full_context() for Gemini pre-loading
         self._full_context: str = ""
         self._context_caching_enabled: bool = False
+        self._setup_graceful_shutdown()
+
+    def _setup_graceful_shutdown(self) -> None:
+        """Register handlers to gracefully close ChromaDB on shutdown."""
+        self._shutdown = False
+        atexit.register(self._graceful_close)
+        signal.signal(signal.SIGTERM, self._signal_handler)
+        signal.signal(signal.SIGINT, self._signal_handler)
+
+    def _signal_handler(self, signum, frame) -> None:
+        logger.info("Shutdown signal received, closing ChromaDB...")
+        self._graceful_close()
+
+    def _graceful_close(self) -> None:
+        """Close ChromaDB client gracefully."""
+        if self._shutdown:
+            return
+        self._shutdown = True
+        try:
+            # ChromaDB PersistentClient doesn't have explicit close method,
+            # but we can clear in-memory caches
+            self._parents.clear()
+            self._children.clear()
+            logger.info("ChromaDB gracefully closed")
+        except Exception as e:
+            logger.warning(f"Error during ChromaDB shutdown: {e}")
 
     # ── Indexing ──────────────────────────────────────────────────
 
@@ -146,6 +179,7 @@ class ChromaLegalStore:
             metadatas=metadatas,
         )
 
+        logger.info(f"Indexed {len(children)} constitution chunks")
         return len(children)
 
     def index_supplementary(
@@ -194,8 +228,11 @@ class ChromaLegalStore:
         Returns child chunks matched by vector similarity.
         Use get_search_context() to resolve full parent articles.
 
+        Also supports keyword-based search for article/section/rule references
+        like "Article 2 section 3 rule 4" or "Article 16".
+
         Args:
-            query: Natural language query.
+            query: Natural language query, or article reference (e.g., "Article 2 section 3 rule 4").
             top_k: Max child chunks to return.
             include_supplementary: Include supplementary docs in results.
 
@@ -205,9 +242,17 @@ class ChromaLegalStore:
         if self._collection.count() == 0:
             return []
 
+        # Check if query looks like an article/section/rule reference
+        # e.g., "Article 2 section 3 rule 4", "Article 16", "Part 3 Article 16"
+        article_ref_results = self._search_by_article_reference(query, top_k)
+        if article_ref_results:
+            return article_ref_results
+
+        # Fall back to semantic vector search
         results = self._collection.query(
             query_texts=[query],
             n_results=top_k,
+            include=["documents", "metadatas", "distances"],
         )
 
         output: List[SearchResult] = []
@@ -230,14 +275,95 @@ class ChromaLegalStore:
                 "child_text": child.get("text", ""),
                 "score": round(score, 4),
                 "parent_id": parent_id,
-                "parent_title": metadata.get("title", ""),
+                "parent_title": metadata.get("article_title", metadata.get("title", "")),
                 "part_number": int(metadata.get("part_number", "0")),
                 "part_title": metadata.get("part_title", ""),
                 "path": json.loads(metadata.get("path", "[]")),
             }
             output.append(result)
 
+        logger.debug(f"Search returned {len(output)} results for query: {query[:50]}")
         return output
+
+    def _search_by_article_reference(
+        self, query: str, top_k: int
+    ) -> Optional[List[SearchResult]]:
+        """Search for articles by reference number (e.g., 'Article 2 section 3 rule 4')."""
+        import re
+
+        # Normalize query
+        q = query.lower().strip()
+
+        # Pattern: Article X [section Y] [rule Z] or Part X Article Y
+        # Also matches: "art 16", "article 16", "art. 16"
+        article_pattern = re.compile(
+            r"(?:article|art\.?)\s*(\d+)(?:\s*(?:section|sec\.?)\s*(\d+))?(?:\s*(?:rule|sub-?clause)\s*(\d+))?",
+            re.IGNORECASE,
+        )
+        part_pattern = re.compile(
+            r"(?:part)\s*(\d+)\s*(?:article|art\.?)\s*(\d+)", re.IGNORECASE
+        )
+
+        match = article_pattern.search(q) or part_pattern.search(q)
+        if not match:
+            return None
+
+        # Extract numbers
+        if part_pattern.search(q):
+            # Part X Article Y
+            part_num = match.group(1)
+            article_num = match.group(2)
+        else:
+            # Article X [section Y] [rule Z]
+            article_num = match.group(1)
+            section_num = match.group(2)
+            rule_num = match.group(3)
+            part_num = None
+
+        # Build metadata filter for ChromaDB
+        where_filter = {}
+        if part_num:
+            where_filter["part_number"] = {"$eq": part_num}
+        if article_num:
+            where_filter["article_number"] = {"$eq": article_num}
+
+        try:
+            results = self._collection.query(
+                query_texts=[query],  # use original query for embedding similarity
+                n_results=top_k,
+                where=where_filter if where_filter else None,
+                include=["documents", "metadatas", "distances"],
+            )
+        except (ChromaError, Exception) as e:
+            logger.warning(f"ChromaDB query failed: {e}")
+            return None
+
+        output: List[SearchResult] = []
+        ids_list = results.get("ids", [[]])[0]
+        metadatas_list = results.get("metadatas", [[]])[0]
+        distances = results.get("distances", [[]])[0]
+
+        for i, child_id in enumerate(ids_list):
+            metadata = metadatas_list[i] if i < len(metadatas_list) else {}
+            distance = distances[i] if i < len(distances) else 0.0
+            score = 1.0 - distance
+
+            child = self._children.get(child_id, {})
+            parent_id = child.get("parent_id", metadata.get("parent_id", ""))
+
+            result: SearchResult = {
+                "child_id": child_id,
+                "child_text": child.get("text", ""),
+                "score": round(score, 4),
+                "parent_id": parent_id,
+                "parent_title": metadata.get("article_title", metadata.get("title", "")),
+                "part_number": int(metadata.get("part_number", "0")),
+                "part_title": metadata.get("part_title", ""),
+                "path": json.loads(metadata.get("path", "[]")),
+            }
+            output.append(result)
+
+        return output if output else None
 
     def get_search_context(
         self, results: List[SearchResult]

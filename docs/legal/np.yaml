@@ -15,6 +15,44 @@ meta:
     by the Public Procurement Act 2063 and PPMO Regulations. Consult a
     qualified Nepali attorney for advice specific to your situation.
   currency: NPR
+  pep_indicators:
+    title_signals:
+      - minister
+      - secretary
+      - mp
+      - member of parliament
+      - hon'ble
+      - honorable
+      - ex-minister
+      - former minister
+      - mayor
+      - chairperson
+      - commissioner
+      - advisor
+    surname_database:
+      - ojha
+      - thapa
+      - bhattarai
+      - pokharel
+      - khanal
+      - koirala
+      - neupane
+      - aryal
+      - regmi
+      - sharma
+      - pandey
+      - bhandari
+      - sigdel
+      - basnet
+      - khadka
+      - dahal
+      - karki
+      - subedi
+      - chapagain
+    report_filing:
+      ciaa_office: "Commission for Investigation of Abuse of Authority, Tangal, Kathmandu"
+      ppmo_office: "Public Procurement Monitoring Office, Singh Durbar, Kathmandu"
+      helpline: "CIAA Toll-Free: 1660-00-52525"
   oversight_bodies:
     - name: PPMO
       long_name: Public Procurement Monitoring Office
@@ -68,7 +106,7 @@ red_flags:
         - "Screenshot of tender publication date"
         - "Screenshot of submission deadline"
         - "Normal timeline standard from PPMO guidelines"
-    ovesight: PPMO
+    oversight: PPMO
 
   - id: emergency-keywords
     label: "Emergency Procurement Without Justification"
@@ -93,7 +131,7 @@ red_flags:
         - "Copy of the emergency procurement notice"
         - "Any published justification"
         - "Proof that no genuine emergency existed (news reports, official statements)"
-    ovesight: CIAA
+    oversight: CIAA
 
   # ── Specification Violations ─────────────────────────────────────
   - id: single-brand-spec
@@ -118,7 +156,7 @@ red_flags:
         - "Brand/model names in the specification section"
         - "Market research showing available alternatives"
         - "Past tender documents for comparison"
-    ovesight: PPMO
+    oversight: PPMO
 
   - id: vague-spec
     label: "Vague or Copy-Pasted Specifications"
@@ -135,7 +173,7 @@ red_flags:
       evidence:
         - "The vague/conflicting specification text"
         - "Clarification request"
-    ovesight: PPMO
+    oversight: PPMO
 
   # ── Budget Violations ────────────────────────────────────────────
   - id: budget-inflation
@@ -158,7 +196,7 @@ red_flags:
         - "Published estimated cost"
         - "Market rate research"
         - "Comparison with similar projects"
-    ovesight: OAG
+    oversight: OAG
 
   # ── Evaluation Criteria Violations ───────────────────────────────
   - id: opaque-evaluation
@@ -183,7 +221,7 @@ red_flags:
       evidence:
         - "Evaluation criteria section from the tender"
         - "Lack of scoring weights or methodology"
-    ovesight: PPMO
+    oversight: PPMO
 
   - id: missing-evaluation-section
     label: "No Evaluation Criteria Section"
@@ -201,7 +239,7 @@ red_flags:
       template: "complaint_ppmo"
       evidence:
         - "The entire tender document showing no evaluation criteria"
-    ovesight: PPMO
+    oversight: PPMO
 
   # ── Terms Violations ─────────────────────────────────────────────
   - id: conflict-interest-signals
@@ -222,7 +260,7 @@ red_flags:
         - "Names of evaluation committee members"
         - "Relationships with bidders (if known)"
         - "Company registration details of winning bidder"
-    ovesight: CIAA
+    oversight: CIAA
 
   - id: unusual-contract-terms
     label: "Unusual or One-Sided Contract Terms"
@@ -239,7 +277,7 @@ red_flags:
       evidence:
         - "The contract terms section"
         - "Standard PPMO model contract for comparison"
-    ovesight: PPMO
+    oversight: PPMO
 
   # ── Integrity Violations ─────────────────────────────────────────
   - id: bid-splitting
@@ -264,7 +302,7 @@ red_flags:
         - "List of multiple contracts awarded around same time"
         - "Same contractor/entity receiving multiple awards"
         - "Total value exceeding normal threshold"
-    ovesight: CIAA
+    oversight: CIAA
 
   - id: single-bidder-award
     label: "Single Bidder / No Competition"
@@ -287,7 +325,7 @@ red_flags:
       evidence:
         - "Bid opening minutes showing number of bidders"
         - "List of invited bidders"
-    ovesight: PPMO
+    oversight: PPMO
 
   - id: shell-company-bidder
     label: "Suspicious Bidder / Shell Company"
@@ -307,14 +345,18 @@ red_flags:
         - "Director names and background"
         - "Shareholder registration details"
         - "Past contract history with government"
-    ovesight: CIAA
+    oversight: CIAA
 
 templates:
-  complaint_ciaa:
-    id: complaint_ciaa
+  - id: complaint_ciaa
     template_name: complaint_ciaa
     title: "Complaint to Commission for Investigation of Abuse of Authority (CIAA)"
     filing_body: CIAA
+    subject_tags:
+      - corruption
+      - procurement
+      - irregularity
+      - ciaa
     body: |-
       DATE: [dd/mm/yyyy]
       TO: The Honorable Chief Commissioner
@@ -376,11 +418,15 @@ templates:
       2. [Evidence items]
       3. [Any other relevant materials]
 
-  complaint_ppmo:
-    id: complaint_ppmo
+  - id: complaint_ppmo
     template_name: complaint_ppmo
     title: "Complaint to Public Procurement Monitoring Office (PPMO)"
     filing_body: PPMO
+    subject_tags:
+      - procurement
+      - bid
+      - tender
+      - ppmo
     body: |-
       DATE: [dd/mm/yyyy]
       TO: The Spokesperson / Secretary
@@ -433,11 +479,15 @@ templates:
       ATTACHMENTS:
       [List supporting documents]
 
-  rti_request:
-    id: rti_request
+  - id: rti_request
     template_name: rti_request
     title: "Right to Information Request"
     filing_body: "Relevant Public Body"
+    subject_tags:
+      - rti
+      - information
+      - transparency
+      - disclosure
     body: |-
       DATE: [dd/mm/yyyy]
       TO: Chief Information Officer
@@ -478,11 +528,15 @@ templates:
       [Phone Number]
       [Email]
 
-  appeal_review_committee:
-    id: appeal_review_committee
+  - id: appeal_review_committee
     template_name: appeal_review_committee
     title: "Appeal to Review Committee"
     filing_body: "Review Committee (PPMO)"
+    subject_tags:
+      - appeal
+      - review
+      - procurement
+      - dispute
     body: |-
       DATE: [dd/mm/yyyy]
       TO: The Chairperson
@@ -513,3 +567,1001 @@ templates:
       [Appellant Name]
       [Signature]
       [Contact Details]
+
+  # ═══════════════════════════════════════════════════════════════
+  # NEW NEPAL COMPLAINT TEMPLATES (12+)
+  # ═══════════════════════════════════════════════════════════════
+
+  # ── 1. Consumer Rights (Department of Commerce) ──
+  - id: complaint_consumer_doc
+    template_name: complaint_consumer_doc
+    title: "Complaint to Department of Commerce — Consumer Rights Violation"
+    filing_body: "Department of Commerce, Ministry of Industry, Commerce and Supplies"
+    subject_tags:
+      - consumer rights
+      - goods defect
+      - services deficiency
+      - consumer protection
+      - Department of Commerce
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: The Director General
+      Department of Commerce
+      Ministry of Industry, Commerce and Supplies
+      Singh Durbar, Kathmandu, Nepal
+
+      RE: COMPLAINT REGARDING CONSUMER RIGHTS VIOLATION — [Invoice/Receipt No./Reference]
+
+      RESPECTED SIR/MADAM,
+
+      I, [Complainant Name], a consumer residing at [Address], do hereby
+      lodge this complaint under the Consumer Protection Act 2075 (2018)
+      regarding a defect/deficiency in goods/services purchased from
+      [Name of Seller/Service Provider].
+
+      1. DETAILS OF PURCHASE
+         Purchased Item / Service: [Description]
+         Date of Purchase: [dd/mm/yyyy]
+         Amount Paid: NPR [Amount]
+         Invoice / Receipt No.: [Number]
+         Seller / Provider Name: [Name]
+         Seller / Provider Address: [Full Address]
+
+      2. NATURE OF DEFECT / DEFICIENCY
+         [Describe the defect in goods or deficiency in service in
+         detail — e.g., manufacturing defect, expiry date issue,
+         poor quality, short weight/measurement, false advertisement,
+         overcharging, etc.]
+
+      3. ATTEMPT TO RESOLVE WITH SELLER
+         [Describe any communication with the seller/provider and
+         their response or failure to resolve the issue]
+
+      4. LEGAL PROVISIONS
+         This violation contravenes the Consumer Protection Act 2075,
+         particularly Sections [specify sections, e.g., §5 — right to
+         safety, §6 — right to information, §7 — right to redressal].
+
+      5. RELIEF SOUGHT
+         I respectfully request the Department to:
+         a) Investigate the above-mentioned complaint
+         b) Direct the seller/provider to replace/repair the goods
+            or refund the amount paid
+         c) Take appropriate action against the seller/provider under
+            the Consumer Protection Act 2075
+         d) Award compensation for the loss and inconvenience suffered
+
+      EVIDENCE ENCLOSED:
+      1. Copy of invoice/receipt
+      2. Photographs of defective goods (if applicable)
+      3. Correspondence with seller/provider
+      4. [Any other relevant documents]
+
+      I submit this complaint in good faith and am prepared to provide
+      further information as required.
+
+      Sincerely,
+
+      [Complainant Name]
+      [Phone Number]
+      [Email Address]
+      [Full Address]
+
+  # ── 2. Banking / Finance (Nepal Rastra Bank) ──
+  - id: complaint_banking_nrb
+    template_name: complaint_banking_nrb
+    title: "Complaint to Nepal Rastra Bank — Banking and Financial Service Deficiency"
+    filing_body: "Nepal Rastra Bank (NRB), Banking Sector Supervision Department"
+    subject_tags:
+      - banking
+      - finance
+      - NRB
+      - bank complaint
+      - financial services
+      - loan
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: The Governor / The Chief, Banking Sector Supervision Department
+      Nepal Rastra Bank (NRB)
+      Central Office, Baluwatar
+      Kathmandu, Nepal
+
+      RE: COMPLAINT REGARDING BANKING SERVICE DEFICIENCY — [Bank Name/Branch]
+
+      RESPECTED SIR/MADAM,
+
+      I, [Complainant Name], a customer of [Bank Name], [Branch],
+      having account number [Account No.], hereby submit this complaint
+      under the Nepal Rastra Bank Act 2058 and related directives
+      regarding the following banking service deficiency.
+
+      1. BANK DETAILS
+         Bank Name: [Name of Bank]
+         Branch: [Branch Name and Location]
+         Account Type: [Savings/Current/Loan/Fixed Deposit]
+         Account Number: [Account Number]
+
+      2. NATURE OF COMPLAINT
+         [Describe the issue — e.g., unauthorised deduction from
+         account, delay in loan processing, excessive charges not
+         disclosed, wrongful freezing of account, non-payment of
+         matured deposit, ATM/debit card fraud, harassment by
+         recovery agents, etc.]
+
+      3. ATTEMPT TO RESOLVE WITH BANK
+         [Describe the complaint lodged with the bank's grievance
+         officer / branch manager, date of complaint, response
+         received (if any), and the bank's failure to resolve]
+
+      4. PROVISIONS VIOLATED
+         [Cite relevant NRB unified directives or Nepal Rastra Bank
+         Act provisions — e.g., Directive No. [X] on interest rate,
+         Directive on Customer Protection, Section [Y] of NRB Act]
+
+      5. RELIEF SOUGHT
+         I humbly request Nepal Rastra Bank to:
+         a) Direct the bank to rectify the deficiency immediately
+         b) Restore/credit the amount wrongfully deducted/withheld
+         c) Impose appropriate penalties on the bank for non-compliance
+         d) Award compensation for financial loss and harassment
+
+      EVIDENCE ENCLOSED:
+      1. Copy of bank statement / transaction record
+      2. Copy of complaint lodged with the bank
+      3. Correspondence with bank officials
+      4. [Any other supporting documents]
+
+      I affirm that the information provided is true to the best
+      of my knowledge and belief.
+
+      Sincerely,
+
+      [Complainant Name]
+      [Phone Number]
+      [Email Address]
+      [Full Address]
+
+  # ── 3. Land / Property (Land Revenue Office) ──
+  - id: complaint_land_revenue
+    template_name: complaint_land_revenue
+    title: "Complaint to Land Revenue Office — Land and Property Dispute"
+    filing_body: "Land Revenue Office (Malpot Office), Ministry of Land Management"
+    subject_tags:
+      - land
+      - property
+      - land revenue
+      - land dispute
+      - property rights
+      - malpot
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: The Chief Land Revenue Officer
+      Land Revenue Office (Malpot Office)
+      [District Name], Nepal
+
+      RE: COMPLAINT REGARDING LAND / PROPERTY MATTER — [Plot/Kitta Number]
+
+      RESPECTED SIR/MADAM,
+
+      I, [Complainant Name], a citizen of Nepal residing at [Address],
+      do hereby submit this complaint regarding the following land
+      and property matter under the Land Revenue Act 2034 (1977) and
+      the Land Reform Act 2021 (1964).
+
+      1. PROPERTY DETAILS
+         District: [District]
+         VDC / Municipality: [Name]
+         Ward No.: [Ward]
+         Plot / Kitta No.: [Number]
+         Area: [Ropani/Anna/Dhur or Sq. Meters]
+         Current Registered Owner: [Name]
+
+      2. NATURE OF COMPLAINT
+         [Describe the issue — e.g., land encroachment, dispute
+         over land boundary, delay in registration of deed,
+         mutation (nam-sari) not processed, lost land ownership
+         certificate (lal-purja), illegal transfer of land,
+         dispute over inheritance, government land grab, etc.]
+
+      3. RELEVANT DOCUMENTS IN MY POSSESSION
+         [List documents — e.g., Lal Purja (land ownership
+         certificate), land revenue receipt, previous deed
+         copy, site map, inheritance certificate, etc.]
+
+      4. EFFORTS MADE FOR RESOLUTION
+         [Describe any previous applications made, meetings with
+         land revenue officials, and the outcome]
+
+      5. RELIEF SOUGHT
+         I respectfully request the Land Revenue Office to:
+         a) Investigate the above matter
+         b) [Specific action needed — e.g., process the mutation,
+            issue certified copy of lal-purja, demarcate boundary,
+            stop illegal encroachment, etc.]
+         c) Provide a written response within the statutory period
+            under the Land Revenue Act
+
+      I submit this application in good faith and undertake to
+      provide any further documentation as required.
+
+      Sincerely,
+
+      [Complainant Name]
+      [Phone Number]
+      [Email Address]
+      [Full Address]
+
+      ENCLOSURES:
+      1. [List of documents attached]
+
+  # ── 4. Family / Domestic Violence (National Women Commission) ──
+  - id: complaint_domestic_violence
+    template_name: complaint_domestic_violence
+    title: "Complaint to National Women Commission — Domestic Violence / Family Matter"
+    filing_body: "National Women Commission (NWC)"
+    subject_tags:
+      - domestic violence
+      - family
+      - women's rights
+      - gender-based violence
+      - National Women Commission
+      - dowry
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: The Honorable Chairperson
+      National Women Commission (NWC)
+      Bansbari, Kathmandu, Nepal
+
+      RE: COMPLAINT REGARDING DOMESTIC VIOLENCE / FAMILY MATTER
+
+      RESPECTED MADAM CHAIRPERSON,
+
+      I, [Complainant Name], a citizen of Nepal residing at [Address],
+      do hereby lodge this complaint under the Domestic Violence
+      (Offence and Punishment) Act 2066 (2009) and the Gender Equality
+      Act 2063 (2006).
+
+      1. DETAILS OF COMPLAINANT
+         Name: [Complainant Name]
+         Age: [Age]
+         Address: [Full Address]
+         Contact: [Phone Number]
+
+      2. DETAILS OF ACCUSED
+         Name: [Name of Accused]
+         Relationship to Complainant: [Husband/Wife/Father-in-law/etc.]
+         Address: [Full Address]
+
+      3. NATURE OF VIOLENCE / ABUSE
+         [Describe the incidents in detail — e.g., physical assault,
+         verbal abuse, psychological torture, economic deprivation,
+         dowry harassment, threats, forced eviction from home,
+         child custody dispute, denial of maintenance, etc.]
+         [Include dates and frequency of incidents]
+
+      4. PREVIOUS COMPLAINTS / POLICE REPORT
+         [State whether a police complaint was filed, FIR number
+         (if any), name of police station, and action taken]
+
+      5. MEDICAL / OTHER EVIDENCE
+         [List medical reports, photographs of injuries, witness
+         statements, or any other evidence]
+
+      6. URGENCY / SAFETY CONCERNS
+         [Explain if there is immediate threat to life or safety,
+         whether shelter or protection is needed]
+
+      7. RELIEF SOUGHT
+         I humbly request the National Women Commission to:
+         a) Provide immediate protection and shelter if required
+         b) Mediate or facilitate legal proceedings
+         c) Refer the matter to the concerned authority for
+            prosecution of the accused
+         d) Recommend interim maintenance / compensation
+         e) Provide counselling and support services
+
+      I submit this complaint in good faith and am prepared to
+      provide further evidence and cooperate with the investigation.
+
+      Sincerely,
+
+      [Complainant Name]
+      [Phone Number]
+      [Email Address]
+
+      ENCLOSURES:
+      1. [List of supporting documents and evidence]
+
+  # ── 5. Cyber Crime (Cyber Bureau) ──
+  - id: complaint_cyber_crime
+    template_name: complaint_cyber_crime
+    title: "Complaint to Nepal Police Cyber Bureau — Cyber Crime"
+    filing_body: "Cyber Bureau, Nepal Police"
+    subject_tags:
+      - cyber crime
+      - cyber bureau
+      - online fraud
+      - hacking
+      - social media
+      - electronic transaction
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: The Chief / Officer-in-Charge
+      Cyber Bureau, Nepal Police
+      Singha Durbar, Kathmandu, Nepal
+
+      RE: COMPLAINT REGARDING CYBER CRIME — [Reference/Case ID]
+
+      RESPECTED SIR/MADAM,
+
+      I, [Complainant Name], a citizen of Nepal residing at [Address],
+      do hereby lodge this complaint under the Electronic Transactions
+      Act 2063 (2008) and the Cyber Crime related provisions of the
+      Nepal Penal Code regarding the following cyber crime incident.
+
+      1. COMPLAINANT DETAILS
+         Name: [Complainant Name]
+         Address: [Full Address]
+         Contact Number: [Phone Number]
+         Email Address: [Email]
+         Occupation: [Occupation]
+
+      2. DETAILS OF INCIDENT
+         Date of Incident: [dd/mm/yyyy]
+         Time of Incident: [Time]
+         Place / Platform: [e.g., Facebook, Instagram, E-sewa,
+         ConnectIPS, bank portal, website, email, etc.]
+         Type of Cyber Crime:
+         [ ] Hacking / Unauthorised Access
+         [ ] Online Fraud / Phishing
+         [ ] Identity Theft / Impersonation
+         [ ] Defamation / Harassment (Cyber Stalking)
+         [ ] Hate Speech / Threats
+         [ ] Unauthorised Transaction / Digital Theft
+         [ ] Child Exploitation / Pornography
+         [ ] Other: [Specify]
+
+      3. DESCRIPTION OF INCIDENT
+         [Provide a detailed narration of what happened — include
+         dates, times, persons involved (if known), and the
+         sequence of events]
+
+      4. FINANCIAL LOSS (if applicable)
+         Amount Lost: NPR [Amount]
+         Method of Payment: [Bank transfer/E-sewa/ConnectIPS/Card/etc.]
+
+      5. EVIDENCE IN MY POSSESSION
+         [List evidence — e.g., screenshots, URL links, email
+         headers, transaction receipts, IP addresses, chat logs,
+         phone numbers, account details of suspect]
+
+      6. RELIEF SOUGHT
+         I request the Cyber Bureau to:
+         a) Register an FIR and investigate the incident
+         b) Trace and apprehend the perpetrator(s)
+         c) Freeze/block the accounts used in the crime
+         d) Assist in recovery of the lost amount/funds
+         e) Provide a copy of the investigation report
+
+      I affirm that the information provided is true to the best
+      of my knowledge and belief. A false complaint is punishable
+      under the Electronic Transactions Act 2063.
+
+      Sincerely,
+
+      [Complainant Name]
+      [Signature]
+
+      ENCLOSURES:
+      1. [List of digital and physical evidence attached]
+
+  # ── 6. Police Misconduct (NHRC) ──
+  - id: complaint_police_misconduct
+    template_name: complaint_police_misconduct
+    title: "Complaint to National Human Rights Commission — Police Misconduct"
+    filing_body: "National Human Rights Commission (NHRC), Nepal"
+    subject_tags:
+      - police misconduct
+      - human rights
+      - NHRC
+      - police brutality
+      - abuse of power
+      - custodial violence
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: The Honorable Chairperson
+      National Human Rights Commission (NHRC)
+      Harihar Bhawan, Lalitpur, Nepal
+
+      RE: COMPLAINT REGARDING POLICE MISCONDUCT / HUMAN RIGHTS VIOLATION
+
+      RESPECTED MADAM/SIR,
+
+      I, [Complainant Name], a citizen of Nepal residing at [Address],
+      do hereby lodge this complaint under the National Human Rights
+      Commission Act 2069 (2012) regarding serious human rights
+      violations and misconduct committed by police personnel.
+
+      1. COMPLAINANT DETAILS
+         Name: [Complainant Name]
+         Address: [Full Address]
+         Contact: [Phone Number]
+         Relationship to Victim (if not self): [Self / Family member]
+
+      2. DETAILS OF INCIDENT
+         Date of Incident: [dd/mm/yyyy]
+         Time: [Time]
+         Location: [Exact place where incident occurred]
+         Police Unit Involved: [Police Station / Unit name]
+         Badge Number(s) / Names of Officers: [If known]
+
+      3. NATURE OF MISCONDUCT
+         [Describe the specific misconduct — e.g.:
+         - Use of excessive force / physical assault
+         - Illegal detention / false imprisonment
+         - Demanding bribe / extortion
+         - Verbal abuse / threats
+         - Destruction of property
+         - Denial of medical care in custody
+         - Torture / inhuman treatment
+         - Sexual harassment / assault
+         - Planting false evidence]
+
+      4. WITNESSES
+         [Name and contact of witnesses, if any]
+
+      5. MEDICAL / OTHER EVIDENCE
+         [Medical reports, photographs of injuries, video/audio
+         recordings, written statements]
+
+      6. RELIEF SOUGHT
+         I humbly request the National Human Rights Commission to:
+         a) Conduct an independent investigation into the incident
+         b) Recommend departmental action against the involved
+            police personnel
+         c) Recommend prosecution if a criminal offence is made out
+         d) Award compensation to the victim for the violation
+         e) Issue necessary directives to prevent recurrence
+
+      I submit this complaint in good faith and am ready to
+      cooperate with the investigation.
+
+      Sincerely,
+
+      [Complainant Name]
+      [Phone Number]
+      [Email Address]
+
+      ENCLOSURES:
+      1. [List of supporting documents]
+
+  # ── 7. Human Rights (NHRC) ──
+  - id: complaint_human_rights_nhrc
+    template_name: complaint_human_rights_nhrc
+    title: "Complaint to National Human Rights Commission — Human Rights Violation"
+    filing_body: "National Human Rights Commission (NHRC), Nepal"
+    subject_tags:
+      - human rights
+      - NHRC
+      - rights violation
+      - fundamental rights
+      - discrimination
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: The Honorable Chairperson
+      National Human Rights Commission (NHRC)
+      Harihar Bhawan, Lalitpur, Nepal
+
+      RE: COMPLAINT REGARDING HUMAN RIGHTS VIOLATION
+
+      RESPECTED MADAM/SIR,
+
+      I, [Complainant Name], a citizen of Nepal residing at [Address],
+      do hereby lodge this complaint under Article [X] of the
+      Constitution of Nepal 2015 and the National Human Rights
+      Commission Act 2069 (2012).
+
+      1. DETAILS OF COMPLAINANT / VICTIM
+         Name: [Name]
+         Age: [Age]
+         Gender: [Male/Female/Other]
+         Caste / Ethnicity: [Optional — if relevant to discrimination]
+         Address: [Full Address]
+         Occupation: [Occupation]
+
+      2. DETAILS OF ALLEGED VIOLATOR
+         Name / Entity: [Individual/Organization/Government Body]
+         Designation / Role: [If known]
+         Address: [Address]
+
+      3. DATE, TIME AND PLACE OF VIOLATION
+         Date: [dd/mm/yyyy]
+         Time: [Time]
+         Location: [Full address/description]
+
+      4. NATURE OF HUMAN RIGHTS VIOLATION
+         [Describe the violation in detail — e.g.:
+         - Discrimination based on caste, ethnicity, religion,
+           gender, disability, or sexual orientation
+         - Arbitrary arrest / illegal detention
+         - Restrictions on freedom of expression/assembly/movement
+         - Forced eviction from home or land
+         - Denial of access to healthcare/education/food
+         - Torture or cruel/inhuman treatment
+         - Violation of rights of persons with disabilities
+         - Child rights violation
+         - Labour exploitation / bonded labour]
+
+      5. CONSTITUTIONAL / LEGAL PROVISIONS VIOLATED
+         [Cite relevant articles of the Constitution of Nepal 2015
+         (e.g., Article 16-Right to live with dignity, Article 24-
+         Right against torture, Article 38-Rights of women, etc.)
+         and/or relevant statutes]
+
+      6. EVIDENCE
+         [List all documentary, photographic, or testimonial evidence]
+
+      7. RELIEF SOUGHT
+         I humbly request the National Human Rights Commission to:
+         a) Investigate the violation and document findings
+         b) Recommend remedial action to the concerned authority
+         c) Recommend compensation to the victim
+         d) Issue directives to prevent recurrence of such violations
+         e) Refer the matter for prosecution if a criminal offence
+            has been committed
+
+      I submit this complaint in good faith and am prepared to
+      provide further information and evidence.
+
+      Sincerely,
+
+      [Complainant Name]
+      [Phone Number]
+      [Email Address]
+
+      ENCLOSURES:
+      1. [List of supporting documents]
+
+  # ── 8. Tax / Revenue (Inland Revenue Department) ──
+  - id: complaint_tax_revenue
+    template_name: complaint_tax_revenue
+    title: "Complaint to Inland Revenue Department — Tax and Revenue Matter"
+    filing_body: "Inland Revenue Department (IRD), Nepal"
+    subject_tags:
+      - tax
+      - revenue
+      - Inland Revenue
+      - tax dispute
+      - VAT
+      - income tax
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: The Director General
+      Inland Revenue Department (IRD)
+      Lazimpat, Kathmandu, Nepal
+
+      RE: COMPLAINT / APPLICATION REGARDING TAX MATTER — [PAN/Assessment No.]
+
+      RESPECTED SIR/MADAM,
+
+      I, [Name], a taxpayer of Nepal having Permanent Account Number
+      (PAN) [PAN Number], do hereby submit this complaint/application
+      under the Income Tax Act 2058 (2002) and the Value Added Tax
+      Act 2052 (1996) regarding the following tax matter.
+
+      1. TAXPAYER DETAILS
+         Name: [Name of Individual/Company]
+         PAN Number: [PAN Number]
+         Address: [Registered Address]
+         Contact: [Phone Number / Email]
+         Fiscal Year: [Fiscal Year]
+
+      2. NATURE OF COMPLAINT
+         [Describe the issue — e.g.:
+         - Wrongful tax assessment / excessive tax demand
+         - Delay in VAT/Income Tax refund
+         - Unauthorised penalty / late fee imposed
+         - Discrepancy in tax credit / TDS not credited
+         - Harassment by tax officer
+         - Dispute over tax classification / exemption
+         - Double taxation issue
+         - Non-issuance of tax clearance certificate]
+
+      3. FACTS OF THE CASE
+         [Provide a step-by-step account of the tax matter,
+         including dates of returns filed, notices received,
+         payments made, and correspondence with tax office]
+
+      4. LEGAL GROUNDS
+         [Cite specific sections of the Income Tax Act 2058 or
+         VAT Act 2052 that support your position]
+
+      5. RELIEF SOUGHT
+         I respectfully request the Inland Revenue Department to:
+         a) Review the assessment / decision
+         b) Cancel/modify the disputed tax demand or penalty
+         c) Process the pending refund within [time period]
+         d) Issue the requested certificate/document
+         e) Provide a reasoned written decision
+
+      I enclose copies of all relevant correspondence and documents
+      in support of this application.
+
+      Sincerely,
+
+      [Applicant Name]
+      [Signature]
+      [PAN Number]
+      [Phone Number]
+      [Email Address]
+
+      ENCLOSURES:
+      1. Copy of PAN registration certificate
+      2. Copy of tax assessment notice
+      3. Copies of tax returns and payment receipts
+      4. Correspondence with tax office
+      5. [Any other relevant documents]
+
+  # ── 9. Labour / Employment (Labour Office) ──
+  - id: complaint_labour_office
+    template_name: complaint_labour_office
+    title: "Complaint to Labour Office — Employment and Labour Rights Violation"
+    filing_body: "Labour Office, Ministry of Labour, Employment and Social Security"
+    subject_tags:
+      - labour
+      - employment
+      - labour rights
+      - workplace
+      - employee
+      - wage
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: The Labour Officer
+      [District] Labour Office
+      Ministry of Labour, Employment and Social Security
+      [District], Nepal
+
+      RE: COMPLAINT REGARDING LABOUR / EMPLOYMENT RIGHTS VIOLATION
+
+      RESPECTED SIR/MADAM,
+
+      I, [Complainant Name], an employee/worker, do hereby lodge this
+      complaint under the Labour Act 2074 (2017) and the Labour Rules
+      2075 (2018) regarding violation of my labour rights by my
+      employer.
+
+      1. COMPLAINANT DETAILS
+         Name: [Employee Name]
+         Age: [Age]
+         Address: [Full Address]
+         Contact: [Phone Number]
+
+      2. EMPLOYER DETAILS
+         Employer / Company Name: [Name]
+         Employer Address: [Full Address]
+         Employer Contact: [Phone Number]
+         Nature of Business: [Description]
+
+      3. EMPLOYMENT DETAILS
+         Designation / Position: [Job Title]
+         Date of Joining: [dd/mm/yyyy]
+         Monthly Salary / Wage: NPR [Amount]
+         Working Hours: [Hours per day]
+         Employment Type: [Permanent/Contract/Temporary/Daily Wage]
+
+      4. NATURE OF VIOLATION / GRIEVANCE
+         [Describe the issue — e.g.:
+         - Non-payment / delay of salary or wages
+         - Wrongful termination / unfair dismissal
+         - Denial of leave / public holiday benefits
+         - No employment contract provided
+         - No PF / Social Security contribution
+         - Forced overtime without compensation
+         - Unsafe working conditions
+         - Discrimination / harassment at workplace
+         - Denial of maternity / paternity benefits
+         - Child labour / forced labour]
+
+      5. ATTEMPT TO RESOLVE WITH EMPLOYER
+         [Describe any communication with the employer, dates,
+         and their response or failure to address the grievance]
+
+      6. RELIEF SOUGHT
+         I request the Labour Office to:
+         a) Summon the employer and mediate a resolution
+         b) Direct the employer to pay outstanding wages/salary
+         c) Order reinstatement or fair compensation in case
+            of wrongful termination
+         d) Direct the employer to comply with Labour Act provisions
+         e) Impose penalties for non-compliance as per law
+
+      I submit this complaint in good faith and am prepared to
+      provide further documentation as required.
+
+      Sincerely,
+
+      [Complainant Name]
+      [Signature]
+      [Phone Number]
+      [Email Address]
+
+      ENCLOSURES:
+      1. Copy of employment contract (if available)
+      2. Salary slips / payment records
+      3. Attendance records
+      4. Correspondence with employer
+      5. [Any other supporting documents]
+
+  # ── 10. Education Malpractice (Department of Education) ──
+  - id: complaint_education_malpractice
+    template_name: complaint_education_malpractice
+    title: "Complaint to Department of Education — Education Malpractice"
+    filing_body: "Department of Education, Ministry of Education, Science and Technology"
+    subject_tags:
+      - education
+      - malpractice
+      - school
+      - university
+      - examination
+      - educational institution
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: The Director General
+      Department of Education
+      Ministry of Education, Science and Technology
+      Singha Durbar, Kathmandu, Nepal
+
+      RE: COMPLAINT REGARDING EDUCATION MALPRACTICE — [Institution Name]
+
+      RESPECTED SIR/MADAM,
+
+      I, [Complainant Name], a student/parent/guardian, do hereby
+      lodge this complaint under the Education Act 2028 (1971) and
+      the Education Rules regarding serious malpractices at the
+      educational institution mentioned below.
+
+      1. COMPLAINANT DETAILS
+         Name: [Complainant Name]
+         Status: [Student / Parent / Guardian / Teacher]
+         Address: [Full Address]
+         Contact: [Phone Number / Email]
+
+      2. DETAILS OF INSTITUTION
+         Institution Name: [Name of School/College/University]
+         Address: [Full Address]
+         Affiliation / Registration No.: [If known]
+         Type: [Government / Private / Community]
+
+      3. NATURE OF MALPRACTICE / VIOLATION
+         [Describe the issue in detail — e.g.:
+         - Charging unauthorised / excess fees
+         - Forcing students to purchase books/stationery from
+           specific vendors
+         - Examination irregularities / question paper leak
+         - Irregular admission process / capitation fee
+         - Denial of scholarship / free education entitlements
+         - Poor infrastructure / unsafe school premises
+         - Corporal punishment / abuse of students
+         - Discrimination among students
+         - Teacher misconduct / absenteeism
+         - Non-issuance of transfer certificate / documents
+         - Running institution without proper affiliation]
+
+      4. EVIDENCE
+         [List documents — e.g., fee receipts, prospectus,
+         photographs, correspondence, witness statements]
+
+      5. RELIEF SOUGHT
+         I respectfully request the Department of Education to:
+         a) Investigate the malpractices alleged above
+         b) Direct the institution to rectify the irregularities
+         c) Impose penalties as provided under the Education Act
+         d) Cancel / suspend affiliation if warranted
+         e) Ensure protection of students' rights
+
+      I submit this complaint in good faith and am prepared to
+      provide further information as required by the investigation.
+
+      Sincerely,
+
+      [Complainant Name]
+      [Phone Number]
+      [Email Address]
+      [Full Address]
+
+      ENCLOSURES:
+      1. [List of supporting documents]
+
+  # ── 11. Medical Negligence (Nepal Medical Council) ──
+  - id: complaint_medical_negligence
+    template_name: complaint_medical_negligence
+    title: "Complaint to Nepal Medical Council — Medical Negligence"
+    filing_body: "Nepal Medical Council (NMC)"
+    subject_tags:
+      - medical negligence
+      - doctor
+      - hospital
+      - healthcare
+      - Nepal Medical Council
+      - medical malpractice
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: The Registrar
+      Nepal Medical Council (NMC)
+      Sitapaila, Kathmandu, Nepal
+
+      RE: COMPLAINT REGARDING MEDICAL NEGLIGENCE — [Doctor/Hospital Name]
+
+      RESPECTED SIR/MADAM,
+
+      I, [Complainant Name], a patient / relative of patient,
+      do hereby lodge this complaint under the Nepal Medical Council
+      Act 2020 (1964) and related regulations regarding medical
+      negligence / professional misconduct by the doctor / healthcare
+      provider mentioned below.
+
+      1. COMPLAINANT / PATIENT DETAILS
+         Patient Name: [Name]
+         Complainant Name (if different): [Name]
+         Patient Age: [Age]
+         Patient Address: [Full Address]
+         Contact: [Phone Number / Email]
+         Relationship to Patient: [Self / Spouse / Child / Parent]
+
+      2. DETAILS OF DOCTOR / HEALTHCARE PROVIDER
+         Doctor Name: [Name of Doctor]
+         NMC Registration No.: [If known]
+         Hospital / Clinic Name: [Name of Institution]
+         Hospital Address: [Full Address]
+         Department / Specialty: [Department]
+
+      3. DETAILS OF TREATMENT
+         Date(s) of Treatment: [dd/mm/yyyy]
+         Diagnosis: [Diagnosis given]
+         Procedure / Treatment: [Description]
+         Treating Doctor: [Name]
+
+      4. NATURE OF NEGLIGENCE / MISCONDUCT
+         [Describe the alleged negligence — e.g.:
+         - Wrong diagnosis / missed diagnosis
+         - Surgical error / wrong-site surgery
+         - Medication error / wrong dosage
+         - Lack of informed consent
+         - Failure to refer to specialist
+         - Post-operative complications ignored
+         - Unnecessary surgery / procedure
+         - Poor hygiene leading to infection
+         - Disclosure of patient confidentiality
+         - Abandonment of patient
+         - Verbal abuse / unprofessional behaviour]
+
+      5. RESULT / CONSEQUENCES
+         [Describe the harm caused — e.g., worsening of condition,
+         permanent disability, loss of organ/limb, death, additional
+         medical expenses, mental suffering]
+
+      6. EVIDENCE
+         [List documents — e.g., medical records, prescription,
+         diagnostic reports, operation notes, hospital bills,
+         photographs, expert opinion, witness statements]
+
+      7. RELIEF SOUGHT
+         I humbly request the Nepal Medical Council to:
+         a) Investigate the complaint and examine the doctor's
+            professional conduct
+         b) If negligence is established, take disciplinary action
+            (warning, suspension, or removal from register)
+         c) Direct the doctor/hospital to provide compensation
+         d) Issue recommendations to prevent recurrence
+
+      I submit this complaint in good faith and am prepared to
+      provide further medical records and cooperate fully with
+      the investigation.
+
+      Sincerely,
+
+      [Complainant Name]
+      [Phone Number]
+      [Email Address]
+      [Full Address]
+
+      ENCLOSURES:
+      1. Copy of medical records and reports
+      2. Hospital bills
+      3. Correspondence with doctor/hospital
+      4. Expert medical opinion (if available)
+      5. [Any other relevant documents]
+
+  # ── 12. Environmental Violation (Department of Environment) ──
+  - id: complaint_environment_violation
+    template_name: complaint_environment_violation
+    title: "Complaint to Department of Environment — Environmental Violation"
+    filing_body: "Department of Environment, Ministry of Forests and Environment"
+    subject_tags:
+      - environment
+      - pollution
+      - environmental violation
+      - Department of Environment
+      - waste
+      - conservation
+    body: |-
+      DATE: [dd/mm/yyyy]
+      TO: The Director General
+      Department of Environment
+      Ministry of Forests and Environment
+      Singha Durbar, Kathmandu, Nepal
+
+      RE: COMPLAINT REGARDING ENVIRONMENTAL VIOLATION — [Location/Reference]
+
+      RESPECTED SIR/MADAM,
+
+      I, [Complainant Name], a resident of [Location], do hereby
+      lodge this complaint under the Environment Protection Act 2076
+      (2019) and the Environment Protection Rules 2077 (2020)
+      regarding serious environmental violations at the location
+      described below.
+
+      1. COMPLAINANT DETAILS
+         Name: [Complainant Name]
+         Address: [Full Address]
+         Contact: [Phone Number / Email]
+         Tole / Community: [If applicable]
+
+      2. LOCATION OF VIOLATION
+         District: [District]
+         Municipality / VDC: [Name]
+         Ward No.: [Ward]
+         Landmark / Exact Location: [Description]
+
+      3. NATURE OF ENVIRONMENTAL VIOLATION
+         [Describe the issue in detail — e.g.:
+         - Unauthorised discharge of industrial effluent into river
+         - Air pollution from factory / brick kiln / vehicle emissions
+         - Illegal dumping of solid waste / hazardous waste
+         - Deforestation / encroachment on forest land
+         - Illegal mining / stone quarry without EIA
+         - Noise pollution exceeding permissible limits
+         - Construction without environmental impact assessment (EIA)
+         - Destruction of wetlands / water sources
+         - Poaching / illegal wildlife trade
+         - Use of banned chemicals / pesticides]
+
+      4. DURATION / FREQUENCY
+         [How long has this been occurring? Is it ongoing?]
+
+      5. IMPACT ON COMMUNITY / ENVIRONMENT
+         [Describe the harm — e.g., health problems among residents,
+         death of aquatic life, contamination of drinking water,
+         loss of biodiversity, etc.]
+
+      6. EVIDENCE
+         [List evidence — e.g., photographs, video recordings,
+         laboratory test reports, health reports, witness
+         statements, news articles]
+
+      7. RELIEF SOUGHT
+         I respectfully request the Department of Environment to:
+         a) Conduct an immediate inspection / investigation
+         b) Issue a notice to the polluter/violator to cease
+            the harmful activity
+         c) Order restoration / remediation of the damaged
+            environment
+         d) Impose penalties / environmental compensation
+            under the Environment Protection Act 2076
+         e) Prosecute the offender if the violation is criminal
+
+      I submit this complaint in good faith as a concerned citizen
+      and am prepared to assist the investigation.
+
+      Sincerely,
+
+      [Complainant Name]
+      [Phone Number]
+      [Email Address]
+      [Full Address]
+
+      ENCLOSURES:
+      1. Photographs / video evidence
+      2. Health / medical reports of affected persons
+      3. Expert opinion / lab reports (if any)
+      4. [Any other supporting documents]

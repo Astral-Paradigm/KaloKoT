@@ -19,9 +19,15 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Dict, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+import logging
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
+
+# Rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # Ensure project root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -35,12 +41,20 @@ try:
 except ImportError:
     pass
 
+# Configure logging
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger("justice_api")
+
 from src.analyzer import TenderExtractor, RiskScorer, ReportGenerator, VendorIntelligence, VendorProfile
 from src.lawyer import VirtualLawyer, EvidenceChecklist
 from src.lawyer.drafting import DraftGenerator
 from src.lawyer.risk_assessment import WhistleblowerRiskAssessment
 from src.shared.jurisdiction import JurisdictionLoader
-from src.shared.llm import LLMClient
+from src.shared.llm import LLMClient, FallbackLLMClient, create_llm_client
 from src.shared.chunking import chunk_constitution, get_all_parent_texts
 from src.shared.chroma_store import ChromaLegalStore
 from src.shared.pdf_generator import generate_complaint_pdf, generate_analysis_report_pdf
@@ -48,7 +62,7 @@ from src.shared.models import (
     ComplaintDraft, CounselRequest, CounselResponse,
     JurisdictionCode, RiskReport, TenderDocument,
 )
-from src.shared.tts import speak_text
+from src.shared.tts import speak_text, clean_for_tts
 from src.shared.vector_search import LegalVectorSearch
 
 # ── Application Setup ─────────────────────────────────────────────────────────
@@ -59,6 +73,11 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# ── Rate Limiting ──────────────────────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -68,9 +87,10 @@ app.add_middleware(
 )
 
 # ── Global Instance Cache ─────────────────────────────────────────────────────
+# Lazy-initialized singletons shared across endpoints to avoid redundant setup
 
-_instances: dict = {}
-_report_cache: Dict[str, RiskReport] = {}
+_instances: dict = {}  # Holds lazy-init'd clients (loader, scorer, llm, lawyer, ...)
+_report_cache: Dict[str, RiskReport] = {}  # In-memory store for generated risk reports (keyed by short UUID)
 
 
 def _get_loader() -> JurisdictionLoader:
@@ -97,22 +117,21 @@ def _get_reporter() -> ReportGenerator:
     return _instances["reporter"]
 
 
-def _get_llm() -> Optional[LLMClient]:
+def _get_llm() -> LLMClient | FallbackLLMClient | None:
+    """Lazy-init an LLMClient using the unified factory."""
     if "llm" not in _instances:
-        provider = os.environ.get("LLM_DEFAULT_PROVIDER", "")
-        model = os.environ.get("LLM_DEFAULT_MODEL", "")
-        api_key = os.environ.get("OPENAI_API_KEY", "")
-        if provider == "openai" and api_key:
-            _instances["llm"] = LLMClient(provider="openai", model=model or "gpt-4o-mini")
-        elif os.environ.get("GEMINI_API_KEY"):
-            _instances["llm"] = LLMClient(provider="gemini")
-        elif os.environ.get("OPENROUTER_API_KEY"):
-            _instances["llm"] = LLMClient(provider="openrouter")
-        elif os.environ.get("ANTHROPIC_API_KEY"):
-            _instances["llm"] = LLMClient(provider="anthropic")
-        else:
-            _instances["llm"] = None
+        _instances["llm"] = create_llm_client()
     return _instances["llm"]
+
+
+def _resolve_jurisdiction(jurisdiction: str) -> JurisdictionCode:
+    """Resolve a jurisdiction string to JurisdictionCode enum."""
+    jcode = JurisdictionCode.UNKNOWN
+    for code in JurisdictionCode:
+        if code.value == jurisdiction.lower():
+            jcode = code
+            break
+    return jcode
 
 
 def _get_lawyer() -> VirtualLawyer:
@@ -135,7 +154,7 @@ def _get_checklist() -> EvidenceChecklist:
 
 def _get_vendor_intel() -> VendorIntelligence:
     if "vendor_intel" not in _instances:
-        _instances["vendor_intel"] = VendorIntelligence()
+        _instances["vendor_intel"] = VendorIntelligence(loader=_get_loader())
     return _instances["vendor_intel"]
 
 
@@ -152,9 +171,10 @@ def _get_legal_search() -> LegalVectorSearch:
 
 
 def _get_chroma_store() -> ChromaLegalStore:
+    """Lazy-init the ChromaDB store and auto-index the Constitution of Nepal on first call."""
     if "chroma_store" not in _instances:
         store = ChromaLegalStore()
-        # Auto-index the Constitution of Nepal
+        # Auto-index the Constitution of Nepal into ChromaDB on startup
         loader = _get_loader()
         try:
             import yaml
@@ -163,9 +183,9 @@ def _get_chroma_store() -> ChromaLegalStore:
                 with open(const_path) as f:
                     const_data = yaml.safe_load(f)
                 n = store.index_constitution(const_data)
-                print(f"  Indexed {n} constitution chunks")
+                logger.info(f"Indexed {n} constitution chunks")
         except Exception as e:
-            print(f"  Constitution index: {e}")
+            logger.warning(f"Constitution index: {e}")
         _instances["chroma_store"] = store
     return _instances["chroma_store"]
 
@@ -178,6 +198,7 @@ def _analyze_text(text: str, title: str = "Uploaded Tender") -> RiskReport:
     loader = _get_loader()
     scorer = _get_scorer()
 
+    # Auto-detect jurisdiction from content (e.g. mentions of "Nepal", "CIAA", etc.)
     jurisdiction = loader.detect_jurisdiction_from_text(text)
     tender = TenderDocument(title=title, raw_text=text)
     report = scorer.score(tender)
@@ -186,9 +207,11 @@ def _analyze_text(text: str, title: str = "Uploaded Tender") -> RiskReport:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+# ── Service Information ──
 
 @app.get("/")
 async def root():
+    """Return API metadata and a directory of all available endpoints."""
     return {
         "name": "OpenTender + Counsel API",
         "version": "1.0.0",
@@ -212,6 +235,7 @@ async def root():
 
 @app.get("/health")
 async def health():
+    """Simple liveness probe — returns {'status': 'ok'} when the server is running."""
     return {"status": "ok"}
 
 
@@ -239,12 +263,47 @@ async def list_jurisdictions():
     return {"jurisdictions": jurisdictions}
 
 
+# ── Tender Analysis ──
+
 @app.post("/analyze", summary="Upload a tender file for analysis")
-async def analyze_file(file: UploadFile = File(...)):
-    """Upload a tender document (PDF, TXT, HTML) and get a corruption risk analysis."""
+@limiter.limit("20/minute")
+async def analyze_file(request: Request, file: UploadFile = File(...)):
+    """Upload a tender document (PDF, TXT, HTML, or Image) and get a corruption risk analysis.
+
+    Supported formats:
+    - Text: PDF, TXT, HTML, HTM
+    - Images: JPEG, PNG, GIF, WebP (text extracted via Gemini vision OCR)
+    """
     raw = await file.read()
-    text = raw.decode("utf-8", errors="replace")
-    report = _analyze_text(text, title=file.filename or "Uploaded Tender")
+    content_type = file.content_type or ""
+    filename = (file.filename or "").lower()
+
+    # Detect image by MIME type or extension — images require Gemini OCR for text extraction
+    image_mimes = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"}
+    image_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+    ext = Path(filename).suffix.lower()
+
+    if content_type in image_mimes or ext in image_exts:
+        # Map extension to MIME for Gemini
+        mime_map = {
+            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".png": "image/png", ".gif": "image/gif",
+            ".webp": "image/webp", ".bmp": "image/bmp",
+        }
+        try:
+            llm = _get_llm()
+            if not llm:
+                raise HTTPException(status_code=502, detail="LLM not configured — set GEMINI_API_KEY in .env")
+            text = llm.extract_text_from_image(raw, mime_type=mime_map.get(ext, "image/png"))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"OCR extraction failed: {e}")
+    else:
+        # Treat as plain text — decode with fallback for non-UTF-8 bytes
+        text = raw.decode("utf-8", errors="replace")
+
+    # Run the core analysis pipeline (extract → score → RiskReport)
+    report = _analyze_text(text, title=filename or "Uploaded Tender")
+    # Generate a short unique ID so the report can be retrieved later
     report_id = uuid.uuid4().hex[:12]
     _report_cache[report_id] = report
 
@@ -260,6 +319,7 @@ async def analyze_file(file: UploadFile = File(...)):
                 "severity": c.severity.value,
                 "description": c.description,
                 "location": c.location,
+                "risk_reason": c.risk_reason,
                 "suggestion": c.suggestion,
             }
             for c in report.flagged_clauses
@@ -268,7 +328,8 @@ async def analyze_file(file: UploadFile = File(...)):
 
 
 @app.post("/analyze-text", summary="Submit tender text for analysis")
-async def analyze_text(text: str = Form(...), title: str = Form("Uploaded Tender")):
+@limiter.limit("30/minute")
+async def analyze_text(request: Request, text: str = Form(...), title: str = Form("Uploaded Tender")):
     """Submit tender document text directly and get a corruption risk analysis."""
     report = _analyze_text(text, title=title)
     report_id = uuid.uuid4().hex[:12]
@@ -286,12 +347,15 @@ async def analyze_text(text: str = Form(...), title: str = Form("Uploaded Tender
                 "severity": c.severity.value,
                 "description": c.description,
                 "location": c.location,
+                "risk_reason": c.risk_reason,
                 "suggestion": c.suggestion,
             }
             for c in report.flagged_clauses
-        ],
-    }
+        ],  # end flagged_clauses
+    }  # end /analyze-text response
 
+
+# ── Report Retrieval ──
 
 @app.get("/report/{report_id}", summary="Get cached analysis report")
 async def get_report(report_id: str):
@@ -312,6 +376,7 @@ async def get_report(report_id: str):
                 "severity": c.severity.value,
                 "description": c.description,
                 "location": c.location,
+                "risk_reason": c.risk_reason,
                 "suggestion": c.suggestion,
             }
             for c in report.flagged_clauses
@@ -320,8 +385,12 @@ async def get_report(report_id: str):
     }
 
 
+# ── Legal Counsel ──
+
 @app.post("/counsel", summary="Ask the Virtual Lawyer a question")
+@limiter.limit("30/minute")
 async def counsel(
+    request: Request,
     question: str = Form(...),
     tender_context: str = Form(""),
     jurisdiction: str = Form("unknown"),
@@ -331,24 +400,34 @@ async def counsel(
     loader = _get_loader()
     lawyer = _get_lawyer()
 
-    jcode = JurisdictionCode.UNKNOWN
-    for code in JurisdictionCode:
-        if code.value == jurisdiction.lower():
-            jcode = code
-            break
+    # Resolve jurisdiction string to enum
+    jcode = _resolve_jurisdiction(jurisdiction)
 
+    # If the user provided a report_id, prepend the cached report summary as context
     context = tender_context
     if report_id and report_id in _report_cache:
         report = _report_cache[report_id]
         context = f"{report.tender.title or 'Tender'}\n{report.summary}\n\n{context}"
 
-    request = CounselRequest(
+    # Search the Constitution via ChromaDB (semantic retrieval) — mirrors main.py
+    constitution_context = ""
+    try:
+        store = _get_chroma_store()
+        if store.count() > 0:
+            search_results = store.search(question, top_k=4)
+            if search_results:
+                constitution_context = store.get_search_context(search_results)
+    except Exception:
+        pass
+
+    counsel_req = CounselRequest(
         tender_context=context,
         question=question,
         jurisdiction=jcode,
     )
 
-    response = lawyer.counsel(request)
+    # Pass constitution context to the lawyer
+    response = lawyer.counsel(counsel_req, constitution_context=constitution_context)
     return {
         "answer": response.answer,
         "citations": [
@@ -361,19 +440,19 @@ async def counsel(
     }
 
 
+# ── Evidence & Drafting ──
+
 @app.post("/checklist", summary="Generate evidence checklist")
-async def generate_checklist(report_id: str = Form(...),
+@limiter.limit("20/minute")
+async def generate_checklist(request: Request,
+                              report_id: str = Form(...),
                               jurisdiction: str = Form("unknown")):
     """Generate an evidence preservation checklist based on a risk report."""
     if report_id not in _report_cache:
         raise HTTPException(status_code=404, detail="Report not found")
 
     report = _report_cache[report_id]
-    jcode = JurisdictionCode.UNKNOWN
-    for code in JurisdictionCode:
-        if code.value == jurisdiction.lower():
-            jcode = code
-            break
+    jcode = _resolve_jurisdiction(jurisdiction)
 
     checklist = _get_checklist()
     text = checklist.generate(report, jcode)
@@ -381,20 +460,20 @@ async def generate_checklist(report_id: str = Form(...),
 
 
 @app.post("/export-draft", summary="Export complaint draft as .txt")
+@limiter.limit("20/minute")
 async def export_draft(
+    request: Request,
     title: str = Form(...),
     body: str = Form(...),
     jurisdiction: str = Form("unknown"),
     template_name: str = Form(""),
     instructions: str = Form(""),
 ):
-    """Export a complaint draft as a downloadable .txt file."""
-    jcode = JurisdictionCode.UNKNOWN
-    for code in JurisdictionCode:
-        if code.value == jurisdiction.lower():
-            jcode = code
-            break
+    """Export a complaint draft as a downloadable .txt file using the jurisdiction-specific template engine."""
+    # Resolve jurisdiction string to enum for template selection
+    jcode = _resolve_jurisdiction(jurisdiction)
 
+    # Build the draft model and render via the DraftGenerator
     draft = ComplaintDraft(
         title=title,
         jurisdiction=jcode,
@@ -406,6 +485,7 @@ async def export_draft(
     generator = _get_draft_generator()
     text = generator.export_txt(draft)
 
+    # Return as a downloadable plain-text file
     return PlainTextResponse(
         text,
         media_type="text/plain",
@@ -413,8 +493,12 @@ async def export_draft(
     )
 
 
+# ── Vendor & Risk Assessment ──
+
 @app.post("/vendor-intel", summary="Assess vendor/contractor risk")
+@limiter.limit("30/minute")
 async def vendor_intelligence(
+    request: Request,
     vendor_name: str = Form(...),
     registration_number: Optional[str] = Form(None),
     registration_date: Optional[str] = Form(None),
@@ -422,6 +506,7 @@ async def vendor_intelligence(
     address: Optional[str] = Form(None),
 ):
     """Assess a vendor/contractor for shell company indicators, PEP connections, and registration risk."""
+    # Parse comma-separated directors string into a list
     profile = VendorProfile(
         name=vendor_name,
         registration_number=registration_number,
@@ -439,8 +524,10 @@ async def vendor_intelligence(
     }
 
 
-@app.post("/risk-assessment", summary="Whistleblower personal risk assessment")
+@app.post("/risk-assessment")
+@limiter.limit("30/minute")
 async def whistleblower_risk(
+    request: Request,
     jurisdiction: str = Form(...),
     is_government_employee: bool = Form(False),
     has_evidence_copies: bool = Form(False),
@@ -450,18 +537,19 @@ async def whistleblower_risk(
     Provides jurisdiction-specific retaliation likelihood, anonymity options,
     witness protection availability, and precaution steps.
     """
-    jcode = JurisdictionCode.UNKNOWN
-    for code in JurisdictionCode:
-        if code.value == jurisdiction.lower():
-            jcode = code
-            break
+    jcode = _resolve_jurisdiction(jurisdiction)
     assessor = _get_risk_assessment()
+    # Runs jurisdiction-specific analysis: retaliation likelihood, anonymity, witness protection
     result = assessor.assess(jcode, is_government_employee, has_evidence_copies)
     return result
 
 
-@app.post("/legal-search", summary="Semantic search over legal knowledge base")
+# ── Legal Knowledge Search ──
+
+@app.post("/legal-search")
+@limiter.limit("30/minute")
 async def legal_search(
+    request: Request,
     query: str = Form(...),
     jurisdiction: str = Form("np"),
     top_k: int = Form(5),
@@ -475,25 +563,26 @@ async def legal_search(
     loader = _get_loader()
     searcher = _get_legal_search()
 
-    jcode = JurisdictionCode.UNKNOWN
-    for code in JurisdictionCode:
-        if code.value == jurisdiction.lower():
-            jcode = code
-            break
+    jcode = _resolve_jurisdiction(jurisdiction)
 
-    # Load YAML data and index
+    # Load YAML data for the selected jurisdiction and run hybrid search
     try:
         yaml_data = loader.load_yaml(jcode)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Jurisdiction '{jurisdiction}' not found")
 
     searcher.index_jurisdiction(yaml_data)
+    # Combines keyword (TF-IDF) and semantic (embedding) scoring
     results = searcher.hybrid_search(query, top_k=top_k, threshold=threshold)
     return {"query": query, "jurisdiction": jurisdiction, "results": results}
 
 
+# ── Constitution (Nepal) Search ──
+
 @app.post("/constitution-search", summary="Search Constitution of Nepal via ChromaDB")
+@limiter.limit("30/minute")
 async def constitution_search(
+    request: Request,
     query: str = Form(...),
     top_k: int = Form(5),
     resolve_parents: bool = Form(True),
@@ -508,33 +597,35 @@ async def constitution_search(
     via the /constitution-context endpoint.
     """
     store = _get_chroma_store()
+    # Search child-level clause chunks; optionally resolve up to parent Articles
     raw_results = store.search(query, top_k=top_k)
 
     context = ""
     if resolve_parents:
+        # Assemble full Article/Part context around matched clauses
         context = store.get_search_context(raw_results)
 
     return {
         "query": query,
         "results": [
             {
-                "clause_id": r["child_id"],
-                "clause_text": r["child_text"],
+                "child_id": r["child_id"],
+                "child_text": r["child_text"],
                 "score": r["score"],
-                "article_title": r.get("parent_title", ""),
-                "part_number": r.get("part_number", 0),
+                "parent_id": r.get("parent_id", ""),
+                "parent_title": r.get("parent_title", ""),
                 "part_title": r.get("part_title", ""),
                 "path": r.get("path", []),
             }
             for r in raw_results
         ],
-        "parent_context_length": len(context),
-        "parent_context": context if resolve_parents else None,
+        "context": context if resolve_parents else "",
     }
 
 
-@app.get("/constitution-context", response_class=PlainTextResponse, summary="Get full Constitution text for LLM context caching")
-async def constitution_context():
+@app.get("/constitution-context", response_class=PlainTextResponse)
+@limiter.limit("60/minute")
+async def constitution_context(request: Request):
     """Return the full Constitution of Nepal text for pre-loading into an LLM context window.
 
     Use this with Gemini Context Caching: load this once into the LLM's
@@ -554,11 +645,21 @@ async def constitution_context():
 
 
 @app.post("/tts", summary="Convert text to speech (ElevenLabs male voice)")
-async def text_to_speech(text: str = Form(...)):
+@limiter.limit("10/minute")
+async def text_to_speech(request: Request, text: str = Form(...)):
     """Convert text to speech using ElevenLabs with a deep male voice (Adam)."""
-    audio = speak_text(text)
+    # Strip markdown/formatting so TTS doesn't read "star star Article 24 star star"
+    clean_text = clean_for_tts(text)
+    audio = speak_text(clean_text)
     if audio is None:
-        raise HTTPException(status_code=502, detail="TTS unavailable — check ELEVENLABS_API_KEY")
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "TTS unavailable",
+                "reason": "ELEVENLABS_API_KEY not set or ElevenLabs request failed",
+                "fix": "Add ELEVENLABS_API_KEY=<your_key> to .env file in the project root",
+            },
+        )
     from fastapi.responses import StreamingResponse
     return StreamingResponse(audio, media_type="audio/mpeg")
 
@@ -575,15 +676,58 @@ async def draft_complaint(
     phone: str = Form(...),
     email: str = Form(...),
     complaint_description: str = Form(...),
+    complaint_date: str = Form(""),
 ):
-    """Draft a formal complaint letter using the LLM and return as a downloadable PDF.
+    """Draft a formal complaint letter using template matching + LLM personalization.
 
-    Requires complainant info + a description of the issue.
-    The LLM drafts a formal legal complaint letter, then it's wrapped in a PDF.
+    Flow:
+    1. Compare complaint subject against 16 Nepal complaint template subject_tags
+    2. LLM checks if description matches a template's subject
+    3. If match: personalize that template with user's info
+    4. If no match: LLM generates a fresh letter from scratch
+    5. Wraps in downloadable PDF
     """
     llm = _get_llm()
     if not llm:
         raise HTTPException(status_code=502, detail="LLM not configured — set a provider API key in .env")
+
+    # Load templates with subject_tags
+    loader = _get_loader()
+    try:
+        templates = loader.get_templates(JurisdictionCode.NEPAL)
+    except Exception:
+        templates = []
+
+    # ── Step 1: Let LLM pick the best matching template ──────
+    matched_template = None
+    if templates:
+        template_catalog = "\n".join(
+            f"[{t.get('template_name')}] {t.get('title')} — tags: {', '.join(t.get('subject_tags', []))}"
+            for t in templates
+        )
+        match_prompt = (
+            f"Read the complaint description below. From this catalog of Nepal legal complaint templates, "
+            f"choose the ONE best-matching template_name based on subject_tags. "
+            f"If none match well, respond with 'NONE'.\n\n"
+            f"Template Catalog:\n{template_catalog}\n\n"
+            f"Complaint Description:\n{complaint_description}\n\n"
+            f"Answer with ONLY the template_name or 'NONE':"
+        )
+        try:
+            chosen = llm.generate(
+                "You match user complaints to the best legal complaint template. Be precise.",
+                match_prompt,
+                temperature=0.1,
+                max_tokens=64,
+            )
+            chosen = chosen.strip().strip('"').strip("'")
+            if chosen and chosen != "NONE":
+                for t in templates:
+                    if t.get("template_name") == chosen:
+                        matched_template = t
+                        break
+        except Exception:
+            pass
 
     # Search constitution for relevant articles
     constitution_context = ""
@@ -597,32 +741,62 @@ async def draft_complaint(
     except Exception:
         pass
 
-    prompt = (
-        f"You are a legal drafting assistant for Nepal. Draft a formal complaint letter "
-        f"in English based on the following information. Use a professional legal tone.\n\n"
-        f"Complainant Name: {name}\n"
-        f"Permanent Address: {permanent_address}\n"
-        f"Temporary Address: {temporary_address}\n"
-        f"Citizenship No: {citizenship_no}\n"
-        f"Phone: {phone}\n"
-        f"Email: {email}\n\n"
-        f"Complaint Description:\n{complaint_description}\n"
-        f"{constitution_context}\n\n"
-        f"Write the full complaint letter with: "
-        f"1. To: [appropriate authority based on the complaint]\n"
-        f"2. Subject line\n"
-        f"3. Introduction of complainant\n"
-        f"4. Detailed statement of facts\n"
-        f"5. Legal basis (cite relevant constitutional articles where applicable)\n"
-        f"6. Prayer/relief sought\n"
-        f"7. Signature block\n"
-        f"8. List of attached evidence/documents"
-    )
-
-    drafted = llm.generate(
-        "You are a legal drafting assistant for Nepal. Draft formal complaint letters in English.",
-        prompt,
-    )
+    if matched_template:
+        # ── Step 2: Personalize the matched template ──
+        template_body = matched_template.get("body", "")
+        filing_body = matched_template.get("filing_body", "the appropriate authority")
+        personalization_prompt = (
+            f"You are a legal drafting assistant for Nepal. The user's complaint matches "
+            f"the '{matched_template['title']}' template. Personalize the template below "
+            f"by filling in ALL [bracketed] placeholders with the user's details. "
+            f"Use a professional legal tone. Keep the structure of the original template.\n\n"
+            f"Filing Body: {filing_body}\n"
+            f"Complainant Name: {name}\n"
+            f"Permanent Address: {permanent_address}\n"
+            f"Temporary Address: {temporary_address}\n"
+            f"Citizenship No: {citizenship_no}\n"
+            f"Phone: {phone}\n"
+            f"Email: {email}\n"
+            f"Complaint Description: {complaint_description}\n"
+            f"{constitution_context}\n\n"
+            f"TEMPLATE BODY:\n{template_body}\n\n"
+            f"Output the complete, personalized letter. Replace every [bracket] with the user's "
+            f"actual information. Add specific facts from their complaint description. "
+            f"Sign off with the complainant's name."
+        )
+        drafted = llm.generate(
+            "You are a legal drafting assistant for Nepal. Personalize complaint letter templates.",
+            personalization_prompt,
+            temperature=0.3,
+            max_tokens=4096,
+        )
+    else:
+        # ── Step 3: Generate fresh from scratch ──
+        prompt = (
+            f"You are a legal drafting assistant for Nepal. Draft a formal complaint letter "
+            f"in English based on the following information. Use a professional legal tone.\n\n"
+            f"Complainant Name: {name}\n"
+            f"Permanent Address: {permanent_address}\n"
+            f"Temporary Address: {temporary_address}\n"
+            f"Citizenship No: {citizenship_no}\n"
+            f"Phone: {phone}\n"
+            f"Email: {email}\n\n"
+            f"Complaint Description:\n{complaint_description}\n"
+            f"{constitution_context}\n\n"
+            f"Write the full complaint letter with: "
+            f"1. To: [appropriate authority based on the complaint]\n"
+            f"2. Subject line\n"
+            f"3. Introduction of complainant\n"
+            f"4. Detailed statement of facts\n"
+            f"5. Legal basis (cite relevant constitutional articles where applicable)\n"
+            f"6. Prayer/relief sought\n"
+            f"7. Signature block\n"
+            f"8. List of attached evidence/documents"
+        )
+        drafted = llm.generate(
+            "You are a legal drafting assistant for Nepal. Draft formal complaint letters in English.",
+            prompt,
+        )
 
     # Generate PDF
     try:
@@ -635,6 +809,7 @@ async def draft_complaint(
             email=email,
             complaint_text=complaint_description,
             drafted_letter=drafted,
+            complaint_date=complaint_date,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {e}")
@@ -663,7 +838,7 @@ async def analysis_report(
     if not llm:
         raise HTTPException(status_code=502, detail="LLM not configured — set a provider API key in .env")
 
-    # Search constitution for relevant articles
+    # Search constitution for relevant articles to ground the analysis against Nepali law
     constitution_context = ""
     try:
         store = _get_chroma_store()

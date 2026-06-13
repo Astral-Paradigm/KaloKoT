@@ -1,8 +1,12 @@
-"""Complaint/RTI/FOIA draft generator."""
+"""Complaint / RTI / FOIA draft generator.
+
+Generates ready-to-file legal documents (complaint letters, RTI requests,
+whistleblower reports) either via LLM (tailored) or from YAML templates
+(fallback).  Also provides plain-text and .docx export utilities.
+"""
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -10,6 +14,8 @@ from ..shared.models import JurisdictionCode, ComplaintDraft, CounselRequest
 from ..shared.jurisdiction import JurisdictionLoader
 from ..shared.llm import LLMClient
 
+
+# ── LLM system prompt for legal-document drafting ─────────────────────────
 
 DRAFTING_SYSTEM_PROMPT = """You are a legal document drafting assistant specializing in public procurement complaints, 
 whistleblower reports, and RTI/FOIA requests. You have access to a legal knowledge base 
@@ -32,22 +38,50 @@ Output format: plain text document with clear section headings."""
 
 
 class DraftGenerator:
-    """Generate complaint/RTI/whistleblower drafts."""
+    """Generate complaint / RTI / whistleblower draft documents.
+
+    Two modes:
+    * **LLM mode** — uses the configured LLM client to produce a tailored
+      document based on the user's tender context and question.
+    * **Template mode** — selects a YAML template by keyword matching on the
+      question text, fills in basic structure.
+
+    Also exposes :meth:`export_txt` and :meth:`export_docx` for output.
+    """
 
     def __init__(self, loader: JurisdictionLoader, llm: Optional[LLMClient] = None):
+        """Initialise the draft generator.
+
+        Args:
+            loader: Jurisdiction loader (used for legal context + templates).
+            llm: Optional LLM client for AI-generated drafts.
+        """
         self.loader = loader
         self.llm = llm
 
     def generate_complaint(self, request: CounselRequest) -> ComplaintDraft:
-        """Generate a complaint draft based on the counsel request."""
+        """Generate a complaint draft based on the counsel request.
+
+        Delegates to LLM if available, otherwise falls back to template
+        selection.
+
+        Args:
+            request: The counsel request (tender context, question, risk report).
+
+        Returns:
+            A ComplaintDraft with title, body, template_name, and instructions.
+        """
         if self.llm:
             return self._generate_with_llm(request)
         else:
             return self._generate_from_template(request)
 
     def _generate_with_llm(self, request: CounselRequest) -> ComplaintDraft:
-        """Use LLM to generate a tailored complaint draft."""
-        # Get jurisdiction context
+        """Use LLM to generate a tailored complaint draft.
+
+        Builds a prompt containing the jurisdiction, tender description, user
+        question, available template names, and relevant legal context.
+        """
         jurisdiction = request.jurisdiction
         legal_context = self.loader.build_legal_context(
             jurisdiction,
@@ -56,7 +90,7 @@ class DraftGenerator:
             if request.risk_report else None
         )
 
-        # Get available templates
+        # Collect available template names for the LLM to reference
         templates = self.loader.get_templates(jurisdiction)
         template_names = [t.get("template_name") or t.get("name") or t.get("id", "?")
                           for t in templates]
@@ -80,10 +114,14 @@ class DraftGenerator:
             max_tokens=4096,
         )
 
+        # Build a human-readable title from the first 50 chars of tender context
+        if len(request.tender_context) > 50:
+            title = f"Complaint Draft — {request.tender_context[:50]}..."
+        else:
+            title = f"Complaint Draft — {request.tender_context}"
+
         return ComplaintDraft(
-            title=f"Complaint Draft — {request.tender_context[:50]}..."
-            if len(request.tender_context) > 50
-            else f"Complaint Draft — {request.tender_context}",
+            title=title,
             jurisdiction=jurisdiction,
             body=draft_text,
             template_name="llm_generated",
@@ -91,13 +129,15 @@ class DraftGenerator:
         )
 
     def _generate_from_template(self, request: CounselRequest) -> ComplaintDraft:
-        """Fallback: generate from YAML template."""
-        jurisdiction = request.jurisdiction
+        """Fallback: generate a draft from a pre-defined YAML template.
 
-        # Determine which template to use
+        Selects a template based on keyword matching against the user's
+        question text (e.g. "ciaa" → complaint_ciaa, "rti" → rti_request).
+        """
+        jurisdiction = request.jurisdiction
         question_lower = request.question.lower()
 
-        # Detect intent
+        # ── Detect intent from question keywords ───────────────────────────
         if "kpk" in question_lower or "ciaa" in question_lower or "anti-corruption" in question_lower:
             template_name = "complaint_ciaa"
         elif "rti" in question_lower or "right to information" in question_lower or "foia" in question_lower or "information" in question_lower:
@@ -109,7 +149,7 @@ class DraftGenerator:
         else:
             template_name = "complaint_ciaa"
 
-        # Load template from YAML
+        # Load the selected template body from the jurisdiction YAML files
         template = self.loader.get_template_by_name(jurisdiction, template_name)
 
         if template and isinstance(template, dict):
@@ -119,7 +159,8 @@ class DraftGenerator:
             else:
                 title = template.get("title", f"Complaint ({jurisdiction.value})")
         else:
-            # Try to find by iterating
+            # Fallback: iterate templates (currently a no-op pass; kept for
+            # future expansion of template-lookup logic).
             templates = self.loader.get_templates(jurisdiction)
             for t in templates:
                 # templates is a list of dicts from red_flag action references
@@ -139,8 +180,16 @@ class DraftGenerator:
     def export_txt(self, draft: ComplaintDraft, path: Optional[str] = None) -> str:
         """Export a complaint draft as a plain-text file.
 
-        Returns the full text content. If path is given, saves to that file.
-        Default output dir: data/output/ (created if needed).
+        Returns the full text content.  If *path* is given, the content is
+        also written to that file (parent directories created on demand).
+        Default output location is data/output/ when path is None.
+
+        Args:
+            draft: The complaint draft to export.
+            path: Optional filesystem path to write to.
+
+        Returns:
+            The full plain-text content of the draft.
         """
         header = (
             f"{'=' * 60}\n"
@@ -166,9 +215,18 @@ class DraftGenerator:
         return content
 
     def export_docx(self, draft: ComplaintDraft, path: Optional[str] = None) -> str:
-        """Export a complaint draft as .docx (plain text fallback if python-docx missing).
+        """Export a complaint draft as a .docx file (plain text fallback).
 
-        Returns the path to the saved file.
+        Uses the ``docx`` library (python-docx) if installed; otherwise falls
+        back to saving as a .txt file via :meth:`export_txt`.
+
+        Args:
+            draft: The complaint draft to export.
+            path: Desired output path.  If None, auto-generates under
+                  data/output/.  The extension is normalised to .docx.
+
+        Returns:
+            The path to the saved file (either .docx or .txt).
         """
         if path is None:
             path = f"data/output/{draft.jurisdiction.value}_{draft.template_name}.txt"
@@ -193,7 +251,7 @@ class DraftGenerator:
             doc.save(outpath)
             return outpath
         except ImportError:
-            # Fallback: save as .txt
+            # python-docx not installed — save as .txt instead
             txt_path = path.replace(".docx", ".txt")
             self.export_txt(draft, txt_path)
             return txt_path

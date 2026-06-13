@@ -1,7 +1,23 @@
-import { createFileRoute } from "@tanstack/react-router";
+/* ===================================================================
+ * KaloKoT — Home Page
+ *
+ * Single‑page application hub with four modes:
+ *   1. Chat  (FAQ / Digital Lawyer)
+ *   2. Tender Review (upload or paste tender for analysis)
+ *   3. Complaint (fill details, draft letter PDF)
+ *   4. Analysis (describe an issue, generate report PDF)
+ *
+ * Includes a landing state (mascot + thought bubble) and TTS playback
+ * for lawyer messages.
+ * =================================================================== */
+
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Backdrop } from "@/components/lawyer/Backdrop";
-import { LowPolyLawyer } from "@/components/lawyer/LowPolyLawyer";
+import {
+  ArrowUp, FileText, HelpCircle, AlertOctagon, BarChart3,
+  BookOpen, Circle,
+} from "lucide-react";
+import mascot from "@/assets/mascot.png";
 import {
   counselQuestion,
   textToSpeech,
@@ -12,7 +28,7 @@ import {
   type CounselResponse,
 } from "@/lib/api";
 
-// ── Types ───────────────────────────────────
+// ── Types ──────────────────────────────────────────
 
 type Mode = "chat" | "tender" | "analysis" | "complaint";
 
@@ -28,6 +44,7 @@ interface FlaggedClause {
   description: string;
   location: string;
   suggestion: string;
+  risk_reason?: string; /* why this clause poses a risk, shown as an expanded note */
 }
 
 interface AnalysisResult {
@@ -38,47 +55,66 @@ interface AnalysisResult {
   flagged_clauses: FlaggedClause[];
 }
 
-// ── Risk helpers ─────────────────────────────
+// ── Risk helpers ───────────────────────────────────
 
+/** Return the oklch colour for a given risk level. */
 function riskColor(level: string): string {
   switch (level) {
-    case "critical":
-      return "oklch(0.52 0.18 30)";
-    case "high":
-      return "oklch(0.6 0.16 40)";
-    case "medium":
-      return "oklch(0.7 0.14 70)";
-    default:
-      return "oklch(0.6 0.1 150)";
+    case "critical": return "oklch(0.52 0.18 30)";
+    case "high":     return "oklch(0.6 0.16 40)";
+    case "medium":   return "oklch(0.7 0.14 70)";
+    default:         return "oklch(0.6 0.1 150)";
   }
 }
 
+/** Return the human‑readable label for a risk level. */
 function riskBadge(level: string): string {
   const map: Record<string, string> = {
-    critical: "CRITICAL",
-    high: "HIGH",
-    medium: "MEDIUM",
-    low: "LOW",
+    critical: "CRITICAL", high: "HIGH",
+    medium: "MEDIUM", low: "LOW",
   };
   return map[level] || level.toUpperCase();
 }
 
+/** Emoji icon corresponding to severity. */
 function severityIcon(sev: string): string {
   switch (sev) {
-    case "critical":
-      return "🔴";
-    case "high":
-      return "🟠";
-    case "medium":
-      return "🟡";
-    default:
-      return "🟢";
+    case "critical": return "🔴";
+    case "high":     return "🟠";
+    case "medium":   return "🟡";
+    default:         return "🟢";
   }
 }
 
-// ── Component ────────────────────────────────
+// ── Static data ────────────────────────────────────
+
+/** Sidebar navigation items. */
+const navItems: { label: string; icon: React.ComponentType<{ className?: string }>; mode: Mode }[] = [
+  { label: "Tender", icon: FileText, mode: "tender" as Mode },
+  { label: "FAQ", icon: HelpCircle, mode: "chat" as Mode },
+  { label: "Complaint", icon: AlertOctagon, mode: "complaint" as Mode },
+  { label: "Analysis", icon: BarChart3, mode: "analysis" as Mode },
+  { label: "Constitution", icon: BookOpen, mode: "chat" as Mode }, // special: navigates to /constitution
+];
+
+/** Recent activity shown in sidebar. */
+const recents: { title: string; time: string }[] = [
+  { title: "Tenancy notice review", time: "2h" },
+  { title: "Contractor delay claim", time: "yesterday" },
+];
+
+/** Suggested quick‑action chips on the landing state. */
+const chips: string[] = [
+  "Draft a complaint against a noisy neighbour",
+  "Summarise this tender document",
+];
+
+// ── Component ──────────────────────────────────────
 
 function HomePage() {
+  const navigate = useNavigate();
+
+  // ── Mode & chat state ────────────────────────
   const [mode, setMode] = useState<Mode>("chat");
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -88,42 +124,66 @@ function HomePage() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // ── TTS state ────────────────────────────────
   const [speakingId, setSpeakingId] = useState<number | null>(null);
+  const [audioBlocked, setAudioBlocked] = useState(false);
+  const [ttsError, setTtsError] = useState<string | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const speakingRef = useRef(false);
+
+  // ── Tender context (carried over to chat) ────
   const [tenderContext, setTenderContext] = useState("");
 
-  // Tender Review state
+  // ── Tender Review state ──────────────────────
   const [uploadedFileName, setUploadedFileName] = useState("");
   const [pasteText, setPasteText] = useState("");
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
-  // Complaint state
+  // ── Complaint state ──────────────────────────
   const [complaintForm, setComplaintForm] = useState({
-    name: "",
-    permanent_address: "",
-    temporary_address: "",
-    citizenship_no: "",
-    phone: "",
-    email: "",
-    description: "",
+    name: "", permanent_address: "", temporary_address: "",
+    citizenship_no: "", phone: "", email: "", description: "", date: "",
   });
   const [complaintPdf, setComplaintPdf] = useState<Blob | null>(null);
   const [draftingComplaint, setDraftingComplaint] = useState(false);
 
-  // Analysis report state
+  // ── Analysis report state ────────────────────
   const [issueText, setIssueText] = useState("");
   const [analysisPdf, setAnalysisPdf] = useState<Blob | null>(null);
   const [generatingAnalysis, setGeneratingAnalysis] = useState(false);
 
+  // ── Refs ─────────────────────────────────────
   const chatEnd = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
+  // ── Effects ──────────────────────────────────
+
+  /** Auto‑scroll chat to the latest message. */
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ── Chat ───────────────────────────────────
+  /** Prime the AudioContext on first user gesture (required by browsers). */
+  useEffect(() => {
+    const primeAudio = () => {
+      if (audioCtxRef.current) return;
+      try {
+        const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+        ctx.resume();
+        audioCtxRef.current = ctx;
+      } catch { /* no audio — safe to ignore */ }
+    };
+    document.addEventListener("pointerdown", primeAudio, { once: true });
+    return () => document.removeEventListener("pointerdown", primeAudio);
+  }, []);
 
+  // ── Chat handlers ────────────────────────────
+
+  /** Send the current input to the counsel backend. */
   const sendMessage = useCallback(async () => {
     if (!input.trim() || loading) return;
     const q = input.trim();
@@ -135,65 +195,74 @@ function HomePage() {
         question: q,
         tender_context: tenderContext,
       });
-      setMessages((m) => [...m, { role: "lawyer", text: res.answer }]);
+      const answer = res.answer;
+      setMessages((m) => [...m, { role: "lawyer", text: answer }]);
     } catch {
-      setMessages((m) => [
-        ...m,
-        {
-          role: "lawyer",
-          text: "I need my legal backend connected to give you a precise answer. Please make sure the server is running, or try again.",
-        },
-      ]);
+      const fallback = "I need my legal backend connected to give you a precise answer. Please make sure the server is running, or try again.";
+      setMessages((m) => [...m, { role: "lawyer", text: fallback }]);
     }
     setLoading(false);
   }, [input, loading, tenderContext]);
 
+  /** Read a lawyer message aloud via TTS. */
   const handleTts = useCallback(async (text: string, idx: number) => {
-    if (speakingId !== null) return;
+    if (speakingRef.current) return;
+    speakingRef.current = true;
     setSpeakingId(idx);
+    setTtsError(null);
     try {
       const blob = await textToSpeech(text);
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
-      audio.onended = () => {
-        setSpeakingId(null);
-        URL.revokeObjectURL(url);
-      };
-      audio.play();
-    } catch {
+      audio.onended = () => { setSpeakingId(null); speakingRef.current = false; URL.revokeObjectURL(url); };
+      await audio.play();
+    } catch (err: unknown) {
       setSpeakingId(null);
+      speakingRef.current = false;
+      if (err instanceof Error && err.message.includes("503")) {
+        setTtsError("TTS unavailable — add ELEVENLABS_API_KEY to .env");
+      } else if (err instanceof DOMException && err.name === "NotAllowedError") {
+        setAudioBlocked(true);
+      } else {
+        setTtsError("Audio playback failed — check server");
+      }
     }
-  }, [speakingId]);
+  }, []);
 
-  // ── Tender Review ──────────────────────────
+  // ── Tender Review handlers ────────────────────
 
+  /** Analyse an uploaded tender file. */
   const handleFileUpload = useCallback(async (file: File) => {
     setUploadedFileName(file.name);
     setAnalyzing(true);
     setAnalysisResult(null);
-    try {
-      const result = await analyzeTender(file);
-      setAnalysisResult(result as unknown as AnalysisResult);
-    } catch (e) {
+    setAnalysisError(null);
+    try { setAnalysisResult(await analyzeTender(file) as unknown as AnalysisResult); }
+    catch (e) {
+      const msg = e instanceof Error ? e.message : "Upload failed";
+      setAnalysisError(msg);
       console.error("Tender analysis failed", e);
     }
     setAnalyzing(false);
   }, []);
 
+  /** Analyse pasted tender text. */
   const handleAnalyzeText = useCallback(async () => {
     if (!pasteText.trim()) return;
     setUploadedFileName("Pasted text");
     setAnalyzing(true);
     setAnalysisResult(null);
-    try {
-      const result = await analyzeTenderText(pasteText);
-      setAnalysisResult(result as unknown as AnalysisResult);
-    } catch {
-      console.error("Analyze text failed");
+    setAnalysisError(null);
+    try { setAnalysisResult(await analyzeTenderText(pasteText) as unknown as AnalysisResult); }
+    catch (e) {
+      const msg = e instanceof Error ? e.message : "Analysis failed";
+      setAnalysisError(msg);
+      console.error("Analyze text failed", e);
     }
     setAnalyzing(false);
   }, [pasteText]);
 
+  /** React to the file‑input change event. */
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -202,935 +271,815 @@ function HomePage() {
     [handleFileUpload],
   );
 
+  /** Send the analysis summary to the chat lawyer and switch to chat mode. */
   const discussWithLawyer = useCallback(() => {
-    if (analysisResult) {
-      setTenderContext(analysisResult.summary);
-    }
+    if (analysisResult) setTenderContext(analysisResult.summary);
     setMode("chat");
   }, [analysisResult]);
 
-  // ── Complaint ──────────────────────────────
+  // ── Complaint handlers ───────────────────────
 
+  /** Draft a complaint letter PDF from form data. */
   const handleDraftComplaint = useCallback(async () => {
     if (!complaintForm.description.trim()) return;
     setDraftingComplaint(true);
     try {
       const blob = await draftComplaint(
-        complaintForm.name,
-        complaintForm.permanent_address,
-        complaintForm.temporary_address,
-        complaintForm.citizenship_no,
-        complaintForm.phone,
-        complaintForm.email,
-        complaintForm.description,
+        complaintForm.name, complaintForm.permanent_address,
+        complaintForm.temporary_address, complaintForm.citizenship_no,
+        complaintForm.phone, complaintForm.email, complaintForm.description,
+        complaintForm.date,
       );
       setComplaintPdf(blob);
-    } catch {
-      console.error("Draft complaint failed");
-    }
+    } catch { console.error("Draft complaint failed"); }
     setDraftingComplaint(false);
   }, [complaintForm]);
 
+  /** Download the drafted complaint PDF. */
   const handleDownloadComplaint = useCallback(() => {
     if (!complaintPdf) return;
     const url = URL.createObjectURL(complaintPdf);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = "complaint-letter.pdf";
-    a.click();
+    a.href = url; a.download = "complaint-letter.pdf"; a.click();
     URL.revokeObjectURL(url);
   }, [complaintPdf]);
 
-  // ── Analysis Report ────────────────────────
+  // ── Analysis Report handlers ─────────────────
 
+  /** Generate a legal analysis PDF for the described issue. */
   const handleGenerateAnalysis = useCallback(async () => {
     if (!issueText.trim()) return;
     setGeneratingAnalysis(true);
-    try {
-      const blob = await generateAnalysisReport(issueText);
-      setAnalysisPdf(blob);
-    } catch {
-      console.error("Generate analysis failed");
-    }
+    try { setAnalysisPdf(await generateAnalysisReport(issueText)); }
+    catch { console.error("Generate analysis failed"); }
     setGeneratingAnalysis(false);
   }, [issueText]);
 
+  /** Download the generated analysis PDF. */
   const handleDownloadAnalysis = useCallback(() => {
     if (!analysisPdf) return;
     const url = URL.createObjectURL(analysisPdf);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = "analysis-report.pdf";
-    a.click();
+    a.href = url; a.download = "analysis-report.pdf"; a.click();
     URL.revokeObjectURL(url);
   }, [analysisPdf]);
 
-  // ── Render ─────────────────────────────────
+  // ── Shared input bar handler ─────────────────
 
-  const modeTab = (key: Mode, label: string, icon: string) => (
-    <button
-      onClick={() => setMode(key)}
-      style={{
-        padding: "6px 16px",
-        borderRadius: "8px",
-        border: `1px solid ${mode === key ? "oklch(0.72 0.14 85)" : "transparent"}`,
-        background: mode === key
-          ? "color-mix(in oklab, oklch(0.72 0.14 85) 15%, transparent)"
-          : "transparent",
-        color: mode === key ? "oklch(0.88 0.02 80)" : "oklch(0.5 0.02 80)",
-        cursor: "pointer",
-        fontSize: "13px",
-        fontWeight: mode === key ? 600 : 400,
-        transition: "all 0.2s",
-      }}
-    >
-      {icon} {label}
-    </button>
-  );
+  /** Submit on Enter (without Shift). */
+  const handleInputKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  /** True when in chat mode with only the opening lawyer message — shows the landing view. */
+  const isLanding = mode === "chat" && messages.length === 1 && messages[0].role === "lawyer";
+
+  // ═══════════════════════════════════════════════════
+  //  RENDER
+  // ═══════════════════════════════════════════════════
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        display: "flex",
-        background: "oklch(0.14 0.01 260)",
-        overflow: "hidden",
-      }}
-    >
-      <Backdrop />
-      <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-        rel="stylesheet"
-      />
+    <div className="min-h-screen w-full text-ink">
 
-      {/* ── Mascot ── */}
-      <div
-        style={{
-          flex: "0 0 220px",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "flex-start",
-          paddingTop: "40px",
-          position: "relative",
-          zIndex: 2,
-        }}
-      >
-        <LowPolyLawyer />
-        <div
-          style={{
-            marginTop: "8px",
-            fontSize: "11px",
-            color: "oklch(0.72 0.14 85)",
-            letterSpacing: "2px",
-            textTransform: "uppercase",
-          }}
-        >
-          KaloKoT
+      {/* ── Header ── */}
+      <header className="glass sticky top-3 z-30 mx-3 flex h-14 items-center justify-between gap-3 rounded-2xl px-4 sm:px-5">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-serif text-xl sm:text-2xl italic tracking-tight text-deep">
+            KaloKoT
+          </span>
+          <span className="hidden sm:inline font-mono text-[10px] uppercase tracking-[0.2em] text-ink/50">
+            v.01
+          </span>
         </div>
-      </div>
+        <nav className="flex shrink-0 items-center gap-2">
+          <div className="h-8 w-8 shrink-0 rounded-full bg-deep text-paper grid place-items-center font-mono text-xs">
+            K
+          </div>
+        </nav>
+      </header>
 
-      {/* ── Main Panel ── */}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          position: "relative",
-          zIndex: 2,
-          minWidth: 0,
-        }}
-      >
-        {/* Mode Tabs */}
-        <div
-          style={{
-            display: "flex",
-            gap: "6px",
-            padding: "12px 20px 0",
-            borderBottom: "1px solid oklch(0.2 0.01 260)",
-          }}
-        >
-          {modeTab("chat", "Chat", "💬")}
-          {modeTab("tender", "Tender Review", "📄")}
-          {modeTab("analysis", "Analysis", "📋")}
-          {modeTab("complaint", "Complaint", "⚖️")}
-        </div>
+      {/* ── Two‑column layout ── */}
+      <div className="mx-3 mt-3 flex gap-3" style={{ minHeight: "calc(100vh - 5rem)" }}>
 
-        {/* ── Content Area ── */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            padding: "16px 20px",
-            fontFamily: "Inter, system-ui, sans-serif",
-            fontSize: "14px",
-            color: "oklch(0.88 0.02 80)",
-            lineHeight: 1.6,
-          }}
-        >
-          {/* ═══ CHAT MODE ═══ */}
-          {mode === "chat" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              {messages.map((msg, i) => (
-                <div
-                  key={i}
-                  style={{
-                    display: "flex",
-                    gap: "10px",
-                    flexDirection: msg.role === "user" ? "row-reverse" : "row",
-                    alignItems: "flex-start",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: "28px",
-                      height: "28px",
-                      borderRadius: "50%",
-                      background:
-                        msg.role === "user"
-                          ? "oklch(0.25 0.02 260)"
-                          : "oklch(0.72 0.14 85 / 0.2)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "12px",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {msg.role === "user" ? "👤" : "⚖️"}
-                  </div>
-                  <div
-                    style={{
-                      maxWidth: "70%",
-                      padding: "10px 14px",
-                      borderRadius: "12px",
-                      background:
-                        msg.role === "user"
-                          ? "oklch(0.22 0.02 260)"
-                          : "oklch(0.18 0.01 260)",
-                      border: `1px solid ${
-                        msg.role === "user"
-                          ? "oklch(0.3 0.02 260)"
-                          : "oklch(0.25 0.02 260)"
-                      }`,
-                      position: "relative",
-                      whiteSpace: "pre-wrap",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (msg.role === "lawyer") {
-                        const btn = e.currentTarget.querySelector(".tts-btn") as HTMLElement;
-                        if (btn) btn.style.opacity = "1";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (msg.role === "lawyer") {
-                        const btn = e.currentTarget.querySelector(".tts-btn") as HTMLElement;
-                        if (btn) btn.style.opacity = "0";
-                      }
-                    }}
-                  >
-                    {msg.text}
-                    {msg.role === "lawyer" && (
-                      <button
-                        className="tts-btn"
-                        onClick={() => handleTts(msg.text, i)}
-                        disabled={speakingId !== null}
-                        style={{
-                          position: "absolute",
-                          bottom: "-12px",
-                          right: "8px",
-                          opacity: 0,
-                          transition: "opacity 0.2s",
-                          background: "oklch(0.72 0.14 85 / 0.3)",
-                          border: "1px solid oklch(0.72 0.14 85 / 0.4)",
-                          borderRadius: "6px",
-                          color: "oklch(0.88 0.02 80)",
-                          cursor: "pointer",
-                          fontSize: "11px",
-                          padding: "2px 6px",
-                          zIndex: 3,
-                        }}
-                        title="Read aloud"
-                      >
-                        {speakingId === i ? "🔊" : "🔈"}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {loading && (
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "6px",
-                    alignItems: "center",
-                    color: "oklch(0.72 0.14 85)",
-                    fontSize: "12px",
-                    paddingLeft: "38px",
-                  }}
-                >
-                  <span>Thinking</span>
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      gap: "3px",
-                    }}
-                  >
-                    {[0, 1, 2].map((d) => (
-                      <span
-                        key={d}
-                        style={{
-                          width: "6px",
-                          height: "6px",
-                          borderRadius: "50%",
-                          background: "oklch(0.72 0.14 85)",
-                          animation: `pulse 1.2s ${d * 0.3}s infinite`,
-                        }}
-                      />
-                    ))}
-                  </span>
-                </div>
-              )}
-              <div ref={chatEnd} />
-            </div>
-          )}
-
-          {/* ═══ TENDER REVIEW MODE ═══ */}
-          {mode === "tender" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              {!analysisResult && !analyzing && (
-                <>
-                  {/* Upload zone */}
-                  <div
-                    style={{
-                      border: "2px dashed oklch(0.3 0.02 260)",
-                      borderRadius: "12px",
-                      padding: "40px 20px",
-                      textAlign: "center",
-                      cursor: "pointer",
-                      transition: "border-color 0.2s",
-                    }}
-                    onClick={() => fileInput.current?.click()}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      e.currentTarget.style.borderColor = "oklch(0.72 0.14 85)";
-                    }}
-                    onDragLeave={(e) => {
-                      e.currentTarget.style.borderColor = "oklch(0.3 0.02 260)";
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const file = e.dataTransfer.files?.[0];
-                      if (file) handleFileUpload(file);
-                    }}
-                  >
-                    <input
-                      ref={fileInput}
-                      type="file"
-                      accept=".pdf,.txt,.html,.htm"
-                      style={{ display: "none" }}
-                      onChange={handleFileChange}
-                    />
-                    <div style={{ fontSize: "32px", marginBottom: "8px" }}>📄</div>
-                    <div style={{ fontWeight: 600, marginBottom: "4px" }}>
-                      Upload a tender document (PDF, TXT, HTML)
-                    </div>
-                    <div style={{ color: "oklch(0.5 0.02 80)", fontSize: "12px" }}>
-                      Drag & drop or click to browse
-                    </div>
-                  </div>
-
-                  {/* OR divider */}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "12px",
-                      color: "oklch(0.4 0.02 260)",
-                      fontSize: "12px",
-                    }}
-                  >
-                    <div style={{ flex: 1, height: "1px", background: "oklch(0.2 0.01 260)" }} />
-                    OR PASTE TEXT
-                    <div style={{ flex: 1, height: "1px", background: "oklch(0.2 0.01 260)" }} />
-                  </div>
-
-                  {/* Paste text area */}
-                  <textarea
-                    value={pasteText}
-                    onChange={(e) => setPasteText(e.target.value)}
-                    placeholder="Paste the tender text here..."
-                    style={{
-                      width: "100%",
-                      minHeight: "120px",
-                      padding: "12px",
-                      borderRadius: "8px",
-                      border: "1px solid oklch(0.25 0.02 260)",
-                      background: "oklch(0.16 0.01 260)",
-                      color: "oklch(0.88 0.02 80)",
-                      fontFamily: "Inter, system-ui, sans-serif",
-                      fontSize: "13px",
-                      resize: "vertical",
-                      outline: "none",
-                      boxSizing: "border-box",
-                    }}
-                  />
+        {/* ── Sidebar (desktop only) ── */}
+        <aside className="glass hidden w-64 shrink-0 flex-col rounded-2xl p-4 md:flex">
+          <div className="mb-4">
+            <p className="text-kicker mb-2 px-2">Sections</p>
+            <ul className="space-y-0.5">
+              {navItems.map((item) => (
+                <li key={item.label}>
                   <button
-                    onClick={handleAnalyzeText}
-                    disabled={!pasteText.trim()}
-                    style={{
-                      padding: "10px 20px",
-                      borderRadius: "8px",
-                      border: "none",
-                      background: pasteText.trim()
-                        ? "oklch(0.72 0.14 85)"
-                        : "oklch(0.2 0.01 260)",
-                      color: pasteText.trim() ? "#000" : "oklch(0.4 0.02 260)",
-                      fontWeight: 600,
-                      cursor: pasteText.trim() ? "pointer" : "not-allowed",
-                      fontSize: "13px",
-                      alignSelf: "flex-start",
+                    onClick={() => {
+                      if (item.label === "Constitution") {
+                        navigate({ to: "/constitution" });
+                      } else {
+                        setMode(item.mode);
+                      }
                     }}
+                    className={`group interactive flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
+                      mode === item.mode
+                        ? "bg-ink/8 text-deep font-medium"
+                        : "text-ink/75 hover:bg-paper-dark/60"
+                    }`}
                   >
-                    Analyze Text
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
                   </button>
-                </>
-              )}
+                </li>
+              ))}
+            </ul>
+          </div>
 
-              {/* Analyzing spinner */}
-              {analyzing && (
-                <div style={{ textAlign: "center", padding: "40px" }}>
-                  <div
-                    style={{
-                      width: "40px",
-                      height: "40px",
-                      border: "3px solid oklch(0.2 0.01 260)",
-                      borderTop: "3px solid oklch(0.72 0.14 85)",
-                      borderRadius: "50%",
-                      animation: "spin 0.8s linear infinite",
-                      margin: "0 auto 16px",
-                    }}
-                  />
-                  <div style={{ color: "oklch(0.5 0.02 80)" }}>
-                    Analyzing tender...
+          <div className="h-px bg-ink/10 my-2" />
+
+          <div className="flex-1 overflow-hidden">
+            <p className="text-kicker mb-2 px-2">Recent</p>
+            <ul className="space-y-1">
+              {recents.map((r) => (
+                <li key={r.title} className="rounded-lg px-3 py-2 hover:bg-paper-dark/60 cursor-pointer">
+                  <p className="text-sm text-ink/80 truncate">{r.title}</p>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-ink/40">{r.time}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Live‑clerk indicator */}
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-ink/10 px-3 py-2 bg-paper/40">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gold opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-gold" />
+            </span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink/60">
+              Live clerk
+            </span>
+          </div>
+        </aside>
+
+        {/* ── Main stage ── */}
+        <main className="relative flex-1 rounded-2xl overflow-hidden">
+
+          {/* Gold glow aura */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(520px 360px at 50% 38%, rgba(201,168,76,0.28), transparent 65%)",
+            }}
+          />
+
+          <div className="relative flex h-full flex-col items-center justify-between gap-6 py-6 px-4 sm:py-10 sm:px-6">
+
+            {/* ── Content area ── */}
+            <div className="flex flex-1 flex-col items-center w-full overflow-y-auto animate-fade-in" key={mode}>
+
+              {/* ═══ LANDING STATE (chat mode, only greeting) ═══ */}
+              {isLanding && (
+                <div className="flex flex-1 flex-col items-center justify-center w-full">
+
+                  {/* Mascot + thought bubble */}
+                  <div className="relative flex flex-col md:flex-row items-center md:items-center justify-center gap-5 md:gap-10 w-full max-w-3xl">
+
+                    {/* Warm halo */}
+                    <div
+                      aria-hidden
+                      className="absolute left-1/2 top-1/2 -z-10 h-[420px] w-[420px] md:h-[520px] md:w-[640px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl animate-fade-in"
+                      style={{
+                        background:
+                          "radial-gradient(ellipse at 50% 45%, rgba(201,168,76,0.32) 0%, rgba(201,168,76,0.12) 40%, transparent 72%)",
+                      }}
+                    />
+
+                    {/* Mascot */}
+                    <div className="relative flex shrink-0 flex-col items-center animate-slide-up delay-100">
+                      <div
+                        aria-hidden
+                        className="absolute -bottom-2 left-1/2 -z-10 h-8 w-[160px] -translate-x-1/2 rounded-[50%] blur-xl"
+                        style={{ background: "radial-gradient(ellipse, rgba(13,13,13,0.35), transparent 70%)" }}
+                      />
+                      <img
+                        src={mascot}
+                        alt="KaloKoT, the pixel-art judge mascot"
+                        width={196}
+                        height={284}
+                        className="pixelated h-[180px] sm:h-[220px] md:h-[280px] w-auto drop-shadow-[0_24px_20px_rgba(13,13,13,0.22)]"
+                      />
+                      <p className="mt-3 text-kicker">Kalokot · in chambers</p>
+                    </div>
+
+                    {/* Thought bubble */}
+                    <div className="relative w-full max-w-sm animate-slide-up delay-200">
+                      <div className="absolute -top-4 left-1/2 -translate-x-1/2 flex md:hidden items-center gap-1.5">
+                        <span className="glass block h-1.5 w-1.5 rounded-full" />
+                        <span className="glass block h-2.5 w-2.5 rounded-full" />
+                        <span className="glass block h-3.5 w-3.5 rounded-full" />
+                      </div>
+                      <div className="absolute -left-6 bottom-6 hidden md:flex flex-col items-center gap-1.5">
+                        <span className="glass block h-2 w-2 rounded-full" />
+                        <span className="glass block h-3 w-3 rounded-full" />
+                        <span className="glass block h-4 w-4 rounded-full" />
+                      </div>
+
+                      <div className="glass rounded-3xl px-5 py-4 sm:px-6 sm:py-5">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-gold/90 mb-2">
+                          Counsel's note
+                        </p>
+                        <p className="font-serif text-sm sm:text-base md:text-lg leading-relaxed text-deep">
+                          Ask me about a <em>tender clause</em>, a faulty service complaint, or how a statute
+                          reads in your situation — I'll cite the section and lay out your options.
+                        </p>
+                        <div className="mt-4 flex items-center gap-2">
+                          <span className="text-kicker">Hearing open</span>
+                          <span className="h-px flex-1 bg-ink/15" />
+                          <span className="font-mono text-[10px] text-ink/45">§ Art. 21</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ color: "oklch(0.4 0.02 260)", fontSize: "12px", marginTop: "4px" }}>
-                    {uploadedFileName}
+
+                  {/* Suggested chips */}
+                  <div className="mt-8 sm:mt-10 flex flex-wrap items-center justify-center gap-2 max-w-xl animate-slide-up delay-300">
+                    {chips.map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => setInput(c)}
+                        className="interactive glass rounded-full px-3.5 py-2 text-[11px] sm:text-xs text-ink/80 hover:text-deep transition"
+                      >
+                        {c}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
 
-              {/* ── Analysis Results ── */}
-              {analysisResult && !analyzing && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                  {/* Risk Badge + Title */}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "12px",
-                    }}
-                  >
+              {/* ═══ CHAT MESSAGES (once user has interacted) ═══ */}
+              {mode === "chat" && !isLanding && (
+                <div className="w-full max-w-3xl space-y-3">
+                  {messages.map((msg, i) => (
                     <div
-                      style={{
-                        padding: "6px 16px",
-                        borderRadius: "20px",
-                        background: riskColor(analysisResult.overall_risk),
-                        color: "#fff",
-                        fontWeight: 700,
-                        fontSize: "13px",
-                        letterSpacing: "1px",
-                      }}
+                      key={i}
+                      className="flex gap-2.5 items-start animate-fade-in"
+                      style={{ flexDirection: msg.role === "user" ? "row-reverse" : "row" }}
                     >
-                      {riskBadge(analysisResult.overall_risk)} RISK
-                    </div>
-                    <div style={{ fontSize: "12px", color: "oklch(0.5 0.02 80)" }}>
-                      {uploadedFileName}
-                    </div>
-                  </div>
-
-                  {/* Summary */}
-                  <div
-                    style={{
-                      padding: "12px",
-                      borderRadius: "8px",
-                      background: "oklch(0.16 0.01 260)",
-                      border: "1px solid oklch(0.22 0.01 260)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "oklch(0.5 0.02 80)",
-                        textTransform: "uppercase",
-                        letterSpacing: "1px",
-                        marginBottom: "6px",
-                      }}
-                    >
-                      Summary
-                    </div>
-                    <div style={{ whiteSpace: "pre-wrap" }}>
-                      {analysisResult.summary}
-                    </div>
-                  </div>
-
-                  {/* Section Scores */}
-                  <div>
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "oklch(0.5 0.02 80)",
-                        textTransform: "uppercase",
-                        letterSpacing: "1px",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      Section Risk Scores
-                    </div>
-                    {Object.entries(analysisResult.section_scores || {}).map(
-                      ([section, level]) => (
+                      {msg.role === "lawyer" && (
                         <div
-                          key={section}
+                          className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs mt-1"
                           style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                            marginBottom: "6px",
+                            background: "color-mix(in oklab, var(--gold) 18%, transparent)",
+                            border: "1px solid color-mix(in oklab, var(--gold) 25%, transparent)",
                           }}
                         >
-                          <div
-                            style={{
-                              flex: "0 0 120px",
-                              fontSize: "12px",
-                              color: "oklch(0.7 0.02 80)",
-                              textTransform: "capitalize",
-                            }}
-                          >
-                            {section.replace(/_/g, " ")}
-                          </div>
-                          <div
-                            style={{
-                              flex: 1,
-                              height: "8px",
-                              borderRadius: "4px",
-                              background: "oklch(0.2 0.01 260)",
-                              overflow: "hidden",
-                            }}
-                          >
-                            <div
-                              style={{
-                                height: "100%",
-                                width:
-                                  level === "critical"
-                                    ? "100%"
-                                    : level === "high"
-                                      ? "75%"
-                                      : level === "medium"
-                                        ? "50%"
-                                        : "25%",
-                                borderRadius: "4px",
-                                background: riskColor(level),
-                                transition: "width 0.5s ease",
-                              }}
-                            />
-                          </div>
-                          <div
-                            style={{
-                              flex: "0 0 60px",
-                              fontSize: "11px",
-                              fontWeight: 600,
-                              color: riskColor(level),
-                              textAlign: "right",
-                            }}
-                          >
-                            {level.toUpperCase()}
-                          </div>
+                          <img src={mascot} alt="KaloKoT" className="w-6 h-6 rounded-full object-cover" />
                         </div>
-                      ),
-                    )}
-                  </div>
-
-                  {/* Flagged Clauses */}
-                  <div>
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "oklch(0.5 0.02 80)",
-                        textTransform: "uppercase",
-                        letterSpacing: "1px",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      Flagged Clauses ({analysisResult.flagged_clauses.length})
-                    </div>
-                    {analysisResult.flagged_clauses.map((clause) => (
+                      )}
+                      {msg.role === "user" && (
+                        <div
+                          className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs mt-1"
+                          style={{
+                            background: "color-mix(in oklab, var(--ink) 8%, transparent)",
+                          }}
+                        >
+                          👤
+                        </div>
+                      )}
                       <div
-                        key={clause.id}
-                        style={{
-                          padding: "12px",
-                          borderRadius: "8px",
-                          background: "oklch(0.16 0.01 260)",
-                          border: `1px solid ${riskColor(clause.severity)}40`,
-                          marginBottom: "8px",
+                        className="relative text-sm leading-relaxed max-w-[75%]"
+                        style={msg.role === "lawyer" ? {
+                          background: "var(--paper)",
+                          border: "1px solid color-mix(in oklab, var(--gold) 20%, transparent)",
+                          borderRadius: "20px 20px 20px 4px",
+                          padding: "14px 18px",
+                          boxShadow: "0 4px 16px rgba(13,13,13,0.06), 0 1px 3px rgba(13,13,13,0.04)",
+                          whiteSpace: "pre-wrap",
+                        } : {
+                          background: "color-mix(in oklab, var(--ink) 6%, transparent)",
+                          border: "1px solid color-mix(in oklab, var(--ink) 12%, transparent)",
+                          borderRadius: "20px 20px 4px 20px",
+                          padding: "10px 14px",
+                          whiteSpace: "pre-wrap",
                         }}
                       >
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            marginBottom: "6px",
-                          }}
-                        >
-                          <span>{severityIcon(clause.severity)}</span>
-                          <span style={{ fontWeight: 600, fontSize: "13px" }}>
-                            {clause.label}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: "10px",
-                              padding: "2px 6px",
-                              borderRadius: "4px",
-                              background: riskColor(clause.severity),
-                              color: "#fff",
-                              marginLeft: "auto",
-                            }}
-                          >
-                            {clause.severity.toUpperCase()}
-                          </span>
-                        </div>
-                        {clause.location && (
-                          <div
-                            style={{
-                              fontSize: "11px",
-                              color: "oklch(0.5 0.02 80)",
-                              marginBottom: "4px",
-                            }}
-                          >
-                            📍 {clause.location}
-                          </div>
+                        {msg.text.split(/\*\*(.+?)\*\*/g).map((part, pi) =>
+                          pi % 2 === 1 ? <strong key={pi}>{part}</strong> : part
                         )}
-                        <div style={{ fontSize: "12px", marginBottom: "6px" }}>
-                          {clause.description}
-                        </div>
-                        {clause.suggestion && (
-                          <div
-                            style={{
-                              fontSize: "12px",
-                              color: "oklch(0.72 0.14 85)",
-                              padding: "6px 8px",
-                              borderRadius: "6px",
-                              background: "oklch(0.72 0.14 85 / 0.08)",
-                              border: "1px solid oklch(0.72 0.14 85 / 0.15)",
-                            }}
-                          >
-                            💡 {clause.suggestion}
+                        {msg.role === "lawyer" && (
+                          <div className="flex items-center gap-2 mt-2 pt-1.5 border-t border-ink/10">
+                            <button
+                              onClick={() => handleTts(msg.text, i)}
+                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition hover:bg-ink/5 active:scale-95"
+                              style={{
+                                color: speakingId === i ? "var(--gold)" : "color-mix(in oklab, var(--ink) 50%, transparent)",
+                              }}
+                              title={speakingId === i ? "Playing..." : "Read aloud"}
+                            >
+                              {speakingId === i ? "🔊" : "🔈"} {speakingId === i ? "Playing..." : "Listen"}
+                            </button>
+                            <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: "color-mix(in oklab, var(--ink) 35%, transparent)" }}>
+                              KaloKoT AI
+                            </span>
                           </div>
                         )}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
+                  {loading && (
+                    <div className="flex gap-1.5 items-center text-gold text-xs pl-10">
+                      <span>Thinking</span>
+                      <span className="inline-flex gap-[3px]">
+                        {[0, 1, 2].map((d) => (
+                          <span
+                            key={d}
+                            className="w-1.5 h-1.5 rounded-full bg-gold"
+                            style={{ animation: `pulse-dot 1.2s ${d * 0.3}s infinite` }}
+                          />
+                        ))}
+                      </span>
+                    </div>
+                  )}
+                  <div ref={chatEnd} />
+                </div>
+              )}
 
-                  {/* Discuss with Lawyer */}
+              {/* ═══ Audio blocked / TTS error indicator ═══ */}
+              {audioBlocked && mode === "chat" && (
+                <div
+                  className="flex items-center gap-2 px-5 py-1.5 text-xs rounded-lg mb-2"
+                  style={{
+                    color: "var(--gold)",
+                    background: "color-mix(in oklab, var(--gold) 10%, transparent)",
+                    border: "1px solid color-mix(in oklab, var(--gold) 20%, transparent)",
+                  }}
+                >
+                  <span>🔇</span>
+                  <span>Click any button to enable audio playback</span>
                   <button
-                    onClick={discussWithLawyer}
+                    onClick={() => { new Audio(); setAudioBlocked(false); }}
+                    className="ml-auto px-2 py-0.5 rounded text-[10px]"
                     style={{
-                      padding: "10px 20px",
-                      borderRadius: "8px",
-                      border: "1px solid oklch(0.72 0.14 85 / 0.4)",
-                      background: "oklch(0.72 0.14 85 / 0.1)",
-                      color: "oklch(0.72 0.14 85)",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      fontSize: "13px",
-                      alignSelf: "center",
+                      background: "color-mix(in oklab, var(--gold) 20%, transparent)",
+                      border: "1px solid color-mix(in oklab, var(--gold) 30%, transparent)",
                     }}
                   >
-                    💬 Discuss this with the Digital Lawyer
-                  </button>
-
-                  {/* Analyze another button */}
-                  <button
-                    onClick={() => {
-                      setAnalysisResult(null);
-                      setUploadedFileName("");
-                      setPasteText("");
-                    }}
-                    style={{
-                      padding: "8px 16px",
-                      borderRadius: "8px",
-                      border: "1px solid oklch(0.3 0.02 260)",
-                      background: "transparent",
-                      color: "oklch(0.6 0.02 80)",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                      alignSelf: "center",
-                    }}
-                  >
-                    Analyze another tender
+                    Dismiss
                   </button>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* ═══ ANALYSIS MODE ═══ */}
-          {mode === "analysis" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              <div
-                style={{
-                  fontSize: "12px",
-                  color: "oklch(0.5 0.02 80)",
-                  marginBottom: "4px",
-                }}
-              >
-                Describe the legal issue or tender concern you'd like analyzed.
-              </div>
-              <textarea
-                value={issueText}
-                onChange={(e) => setIssueText(e.target.value)}
-                placeholder="e.g., A road construction contract was awarded at 40% above market rate with no competitive bidding..."
-                style={{
-                  width: "100%",
-                  minHeight: "150px",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: "1px solid oklch(0.25 0.02 260)",
-                  background: "oklch(0.16 0.01 260)",
-                  color: "oklch(0.88 0.02 80)",
-                  fontFamily: "Inter, system-ui, sans-serif",
-                  fontSize: "13px",
-                  resize: "vertical",
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
-              />
-              <button
-                onClick={handleGenerateAnalysis}
-                disabled={!issueText.trim() || generatingAnalysis}
-                style={{
-                  padding: "10px 20px",
-                  borderRadius: "8px",
-                  border: "none",
-                  background:
-                    !issueText.trim() || generatingAnalysis
-                      ? "oklch(0.2 0.01 260)"
-                      : "oklch(0.72 0.14 85)",
-                  color:
-                    !issueText.trim() || generatingAnalysis
-                      ? "oklch(0.4 0.02 260)"
-                      : "#000",
-                  fontWeight: 600,
-                  cursor:
-                    !issueText.trim() || generatingAnalysis
-                      ? "not-allowed"
-                      : "pointer",
-                  fontSize: "13px",
-                  alignSelf: "flex-start",
-                }}
-              >
-                {generatingAnalysis ? "Generating..." : "Generate Analysis Report"}
-              </button>
-              {analysisPdf && (
-                <button
-                  onClick={handleDownloadAnalysis}
+              {ttsError && mode === "chat" && (
+                <div
+                  className="flex items-center gap-2 px-5 py-1.5 text-xs rounded-lg mb-2"
                   style={{
-                    padding: "10px 20px",
-                    borderRadius: "8px",
-                    border: "1px solid oklch(0.72 0.14 85 / 0.4)",
-                    background: "oklch(0.72 0.14 85 / 0.1)",
-                    color: "oklch(0.72 0.14 85)",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    fontSize: "13px",
-                    alignSelf: "flex-start",
+                    color: "var(--gold)",
+                    background: "color-mix(in oklab, var(--gold) 10%, transparent)",
+                    border: "1px solid color-mix(in oklab, var(--gold) 20%, transparent)",
                   }}
                 >
-                  ⬇ Download Analysis Report (PDF)
-                </button>
+                  <span>⚠️</span>
+                  <span>{ttsError}</span>
+                  <button
+                    onClick={() => setTtsError(null)}
+                    className="ml-auto px-2 py-0.5 rounded text-[10px]"
+                    style={{
+                      background: "color-mix(in oklab, var(--gold) 20%, transparent)",
+                      border: "1px solid color-mix(in oklab, var(--gold) 30%, transparent)",
+                    }}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+
+              {/* ═══ TENDER REVIEW MODE ═══ */}
+              {mode === "tender" && (
+                <div className="w-full max-w-3xl space-y-4">
+                  {!analysisResult && !analyzing && (
+                    <>
+                      {/* Upload zone */}
+                      <div
+                        className="border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition"
+                        style={{ borderColor: "color-mix(in oklab, var(--ink) 20%, transparent)" }}
+                        onClick={() => fileInput.current?.click()}
+                        onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--gold)"; }}
+                        onDragLeave={(e) => { e.currentTarget.style.borderColor = "color-mix(in oklab, var(--ink) 20%, transparent)"; }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const file = e.dataTransfer.files?.[0];
+                          if (file) handleFileUpload(file);
+                        }}
+                      >
+                        <input
+                          ref={fileInput}
+                          type="file"
+                          accept=".pdf,.txt,.html,.htm,.jpg,.jpeg,.png,.gif,.webp"
+                          style={{ display: "none" }}
+                          onChange={handleFileChange}
+                        />
+                        <div className="text-3xl mb-2">📄</div>
+                        <div className="font-semibold mb-1 text-sm">Upload a tender document (PDF, TXT, HTML, Images)</div>
+                        <div className="text-xs" style={{ color: "color-mix(in oklab, var(--ink) 50%, transparent)" }}>
+                          Drag & drop or click to browse
+                        </div>
+                      </div>
+
+                      {/* OR divider */}
+                      <div className="flex items-center gap-3 text-xs" style={{ color: "color-mix(in oklab, var(--ink) 45%, transparent)" }}>
+                        <div className="flex-1 h-px" style={{ background: "color-mix(in oklab, var(--ink) 15%, transparent)" }} />
+                        OR PASTE TEXT
+                        <div className="flex-1 h-px" style={{ background: "color-mix(in oklab, var(--ink) 15%, transparent)" }} />
+                      </div>
+
+                      {/* Paste text area */}
+                      <textarea
+                        value={pasteText}
+                        onChange={(e) => setPasteText(e.target.value)}
+                        placeholder="Paste the tender text here..."
+                        className="w-full min-h-[120px] p-3 rounded-lg text-sm resize-y outline-none"
+                        style={{
+                          border: "1px solid color-mix(in oklab, var(--ink) 15%, transparent)",
+                          background: "color-mix(in oklab, var(--paper-dark) 50%, transparent)",
+                        }}
+                      />
+                      <button
+                        onClick={handleAnalyzeText}
+                        disabled={!pasteText.trim()}
+                        className="px-5 py-2.5 rounded-lg text-sm font-semibold self-start transition"
+                        style={{
+                          background: pasteText.trim() ? "var(--gold)" : "color-mix(in oklab, var(--ink) 10%, transparent)",
+                          color: pasteText.trim() ? "var(--paper)" : "color-mix(in oklab, var(--ink) 40%, transparent)",
+                          cursor: pasteText.trim() ? "pointer" : "not-allowed",
+                        }}
+                      >
+                        Analyze Text
+                      </button>
+                    </>
+                  )}
+
+                  {/* Analyzing spinner */}
+                  {analyzing && (
+                    <div className="text-center py-10">
+                      <div
+                        className="w-10 h-10 rounded-full mx-auto mb-4"
+                        style={{
+                          border: "3px solid color-mix(in oklab, var(--ink) 10%, transparent)",
+                          borderTop: "3px solid var(--gold)",
+                          animation: "spin 0.8s linear infinite",
+                        }}
+                      />
+                      <div className="text-sm" style={{ color: "color-mix(in oklab, var(--ink) 50%, transparent)" }}>Analyzing tender...</div>
+                      <div className="text-xs mt-1" style={{ color: "color-mix(in oklab, var(--ink) 40%, transparent)" }}>{uploadedFileName}</div>
+                    </div>
+                  )}
+
+                  {/* Error banner */}
+                  {analysisError && !analyzing && (
+                    <div
+                      className="p-3 rounded-lg text-sm"
+                      style={{
+                        background: "color-mix(in oklab, #c0392b 10%, transparent)",
+                        border: "1px solid color-mix(in oklab, #c0392b 25%, transparent)",
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span>⚠️</span>
+                        <span className="font-semibold text-sm">Analysis Failed</span>
+                      </div>
+                      <div className="text-xs" style={{ color: "color-mix(in oklab, var(--ink) 65%, transparent)" }}>
+                        {analysisError}
+                      </div>
+                      <button
+                        onClick={() => { setAnalysisError(null); setUploadedFileName(""); }}
+                        className="mt-2 text-xs px-2.5 py-1 rounded"
+                        style={{
+                          border: "1px solid color-mix(in oklab, var(--ink) 20%, transparent)",
+                          color: "color-mix(in oklab, var(--ink) 55%, transparent)",
+                        }}
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Analysis Results */}
+                  {analysisResult && !analyzing && (
+                    <div className="space-y-4">
+                      {/* Risk Badge */}
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="px-4 py-1.5 rounded-full text-xs font-bold tracking-wider text-white"
+                          style={{ background: riskColor(analysisResult.overall_risk) }}
+                        >
+                          {riskBadge(analysisResult.overall_risk)} RISK
+                        </div>
+                        <div className="text-xs" style={{ color: "color-mix(in oklab, var(--ink) 50%, transparent)" }}>
+                          {uploadedFileName}
+                        </div>
+                      </div>
+
+                      {/* Summary */}
+                      <div
+                        className="p-3 rounded-lg text-sm"
+                        style={{
+                          background: "color-mix(in oklab, var(--paper-dark) 50%, transparent)",
+                          border: "1px solid color-mix(in oklab, var(--ink) 10%, transparent)",
+                        }}
+                      >
+                        <div className="text-xs uppercase tracking-wider mb-1" style={{ color: "color-mix(in oklab, var(--ink) 50%, transparent)" }}>
+                          Summary
+                        </div>
+                        <div style={{ whiteSpace: "pre-wrap" }}>{analysisResult.summary}</div>
+                      </div>
+
+                      {/* Section Scores */}
+                      <div>
+                        <div className="text-xs uppercase tracking-wider mb-2" style={{ color: "color-mix(in oklab, var(--ink) 50%, transparent)" }}>
+                          Section Risk Scores
+                        </div>
+                        {Object.entries(analysisResult.section_scores || {}).map(([section, level]) => (
+                          <div key={section} className="flex items-center gap-2.5 mb-1.5">
+                            <div className="flex-[0_0_120px] text-xs capitalize" style={{ color: "color-mix(in oklab, var(--ink) 65%, transparent)" }}>
+                              {section.replace(/_/g, " ")}
+                            </div>
+                            <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "color-mix(in oklab, var(--ink) 10%, transparent)" }}>
+                              <div
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{
+                                  width: level === "critical" ? "100%" : level === "high" ? "75%" : level === "medium" ? "50%" : "25%",
+                                  background: riskColor(level),
+                                }}
+                              />
+                            </div>
+                            <div className="flex-[0_0_60px] text-[11px] font-semibold text-right" style={{ color: riskColor(level) }}>
+                              {level.toUpperCase()}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Flagged Clauses */}
+                      <div>
+                        <div className="text-xs uppercase tracking-wider mb-2" style={{ color: "color-mix(in oklab, var(--ink) 50%, transparent)" }}>
+                          Flagged Clauses ({analysisResult.flagged_clauses.length})
+                        </div>
+                        {analysisResult.flagged_clauses.map((clause) => (
+                          <div
+                            key={clause.id}
+                            className="p-3 rounded-lg mb-2"
+                            style={{
+                              background: "color-mix(in oklab, var(--paper-dark) 40%, transparent)",
+                              border: `1px solid ${riskColor(clause.severity)}40`,
+                            }}
+                          >
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <span>{severityIcon(clause.severity)}</span>
+                              <span className="font-semibold text-sm">{clause.label}</span>
+                              <span
+                                className="ml-auto text-[10px] px-1.5 py-0.5 rounded text-white"
+                                style={{ background: riskColor(clause.severity) }}
+                              >
+                                {clause.severity.toUpperCase()}
+                              </span>
+                            </div>
+                            {clause.location && (
+                              <div className="text-xs mb-1" style={{ color: "color-mix(in oklab, var(--ink) 50%, transparent)" }}>
+                                📍 {clause.location}
+                              </div>
+                            )}
+                            <div className="text-xs mb-1.5">{clause.description}</div>
+                            {clause.risk_reason && (
+                              <div
+                                className="text-xs p-2 rounded mb-1.5"
+                                style={{
+                                  background: "color-mix(in oklab, var(--gold) 6%, transparent)",
+                                  border: "1px solid color-mix(in oklab, var(--gold) 12%, transparent)",
+                                  color: "color-mix(in oklab, var(--ink) 85%, transparent)",
+                                }}
+                              >
+                                ⚠️ <strong>Why this matters:</strong> {clause.risk_reason}
+                              </div>
+                            )}
+                            {clause.suggestion && (
+                              <div
+                                className="text-xs p-1.5 rounded"
+                                style={{
+                                  color: "var(--gold)",
+                                  background: "color-mix(in oklab, var(--gold) 8%, transparent)",
+                                  border: "1px solid color-mix(in oklab, var(--gold) 15%, transparent)",
+                                }}
+                              >
+                                💡 {clause.suggestion}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Action buttons */}
+                      <button
+                        onClick={discussWithLawyer}
+                        className="px-5 py-2.5 rounded-lg text-sm font-semibold self-center"
+                        style={{
+                          border: "1px solid color-mix(in oklab, var(--gold) 35%, transparent)",
+                          background: "color-mix(in oklab, var(--gold) 10%, transparent)",
+                          color: "var(--gold)",
+                        }}
+                      >
+                        💬 Discuss this with the Digital Lawyer
+                      </button>
+                      <button
+                        onClick={() => { setAnalysisResult(null); setUploadedFileName(""); setPasteText(""); setAnalysisError(null); }}
+                        className="px-4 py-2 rounded-lg text-xs self-center"
+                        style={{
+                          border: "1px solid color-mix(in oklab, var(--ink) 20%, transparent)",
+                          background: "transparent",
+                          color: "color-mix(in oklab, var(--ink) 55%, transparent)",
+                        }}
+                      >
+                        Analyze another tender
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ═══ ANALYSIS MODE ═══ */}
+              {mode === "analysis" && (
+                <div className="w-full max-w-3xl space-y-3">
+                  <div className="text-xs mb-1" style={{ color: "color-mix(in oklab, var(--ink) 50%, transparent)" }}>
+                    Describe the legal issue or tender concern you'd like analyzed.
+                  </div>
+                  <textarea
+                    value={issueText}
+                    onChange={(e) => setIssueText(e.target.value)}
+                    placeholder="e.g., A road construction contract was awarded at 40% above market rate with no competitive bidding..."
+                    className="w-full min-h-[150px] p-3 rounded-lg text-sm resize-y outline-none"
+                    style={{
+                      border: "1px solid color-mix(in oklab, var(--ink) 15%, transparent)",
+                      background: "color-mix(in oklab, var(--paper-dark) 50%, transparent)",
+                    }}
+                  />
+                  <button
+                    onClick={handleGenerateAnalysis}
+                    disabled={!issueText.trim() || generatingAnalysis}
+                    className="px-5 py-2.5 rounded-lg text-sm font-semibold self-start transition"
+                    style={{
+                      background: !issueText.trim() || generatingAnalysis
+                        ? "color-mix(in oklab, var(--ink) 10%, transparent)"
+                        : "var(--gold)",
+                      color: !issueText.trim() || generatingAnalysis
+                        ? "color-mix(in oklab, var(--ink) 40%, transparent)"
+                        : "var(--paper)",
+                      cursor: !issueText.trim() || generatingAnalysis ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {generatingAnalysis ? "Generating..." : "Generate Analysis Report"}
+                  </button>
+                  {analysisPdf && (
+                    <button
+                      onClick={handleDownloadAnalysis}
+                      className="px-5 py-2.5 rounded-lg text-sm font-semibold self-start"
+                      style={{
+                        border: "1px solid color-mix(in oklab, var(--gold) 35%, transparent)",
+                        background: "color-mix(in oklab, var(--gold) 10%, transparent)",
+                        color: "var(--gold)",
+                      }}
+                    >
+                      ⬇ Download Analysis Report (PDF)
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* ═══ COMPLAINT MODE ═══ */}
+              {mode === "complaint" && (
+                <div className="w-full max-w-3xl space-y-3">
+                  <div className="text-xs mb-1" style={{ color: "color-mix(in oklab, var(--ink) 50%, transparent)" }}>
+                    Fill in your details and describe the complaint. The Digital Lawyer will draft a formal complaint letter.
+                  </div>
+
+                  {(["name", "permanent_address", "temporary_address", "citizenship_no", "phone", "email", "date"] as const).map((field) => (
+                    <input
+                      key={field}
+                      type={field === "email" ? "email" : field === "date" ? "date" : "text"}
+                      value={complaintForm[field]}
+                      onChange={(e) => setComplaintForm((f) => ({ ...f, [field]: e.target.value }))}
+                      placeholder={
+                        field === "name" ? "Full Name"
+                        : field === "permanent_address" ? "Permanent Address"
+                        : field === "temporary_address" ? "Temporary Address"
+                        : field === "citizenship_no" ? "Citizenship No."
+                        : field === "phone" ? "Phone"
+                        : field === "date" ? "Complaint Date"
+                        : "Email"
+                      }
+                      className="w-full p-2.5 rounded-lg text-sm outline-none"
+                      style={{
+                        border: "1px solid color-mix(in oklab, var(--ink) 15%, transparent)",
+                        background: "color-mix(in oklab, var(--paper-dark) 50%, transparent)",
+                      }}
+                    />
+                  ))}
+
+                  <textarea
+                    value={complaintForm.description}
+                    onChange={(e) => setComplaintForm((f) => ({ ...f, description: e.target.value }))}
+                    placeholder="Describe the complaint in detail..."
+                    className="w-full min-h-[120px] p-3 rounded-lg text-sm resize-y outline-none"
+                    style={{
+                      border: "1px solid color-mix(in oklab, var(--ink) 15%, transparent)",
+                      background: "color-mix(in oklab, var(--paper-dark) 50%, transparent)",
+                    }}
+                  />
+
+                  <button
+                    onClick={handleDraftComplaint}
+                    disabled={!complaintForm.description.trim() || draftingComplaint}
+                    className="px-5 py-2.5 rounded-lg text-sm font-semibold self-start transition"
+                    style={{
+                      background: !complaintForm.description.trim() || draftingComplaint
+                        ? "color-mix(in oklab, var(--ink) 10%, transparent)"
+                        : "var(--gold)",
+                      color: !complaintForm.description.trim() || draftingComplaint
+                        ? "color-mix(in oklab, var(--ink) 40%, transparent)"
+                        : "var(--paper)",
+                      cursor: !complaintForm.description.trim() || draftingComplaint ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {draftingComplaint ? "Drafting..." : "📝 Draft Complaint Letter"}
+                  </button>
+
+                  {complaintPdf && (
+                    <button
+                      onClick={handleDownloadComplaint}
+                      className="px-5 py-2.5 rounded-lg text-sm font-semibold self-start"
+                      style={{
+                        border: "1px solid color-mix(in oklab, var(--gold) 35%, transparent)",
+                        background: "color-mix(in oklab, var(--gold) 10%, transparent)",
+                        color: "var(--gold)",
+                      }}
+                    >
+                      ⬇ Download Complaint Letter (PDF)
+                    </button>
+                  )}
+                </div>
               )}
             </div>
-          )}
 
-          {/* ═══ COMPLAINT MODE ═══ */}
-          {mode === "complaint" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              <div
-                style={{
-                  fontSize: "12px",
-                  color: "oklch(0.5 0.02 80)",
-                  marginBottom: "4px",
-                }}
+            {/* ── Input bar (always visible) ── */}
+            <div className="w-full max-w-2xl animate-slide-up delay-500">
+              <form
+                onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
+                className="glass flex items-center gap-2 rounded-full pl-5 pr-1.5 py-1.5"
               >
-                Fill in your details and describe the complaint. The Digital Lawyer will draft a formal complaint letter.
-              </div>
-
-              {(["name", "permanent_address", "temporary_address", "citizenship_no", "phone", "email"] as const).map((field) => (
                 <input
-                  key={field}
-                  type={field === "email" ? "email" : "text"}
-                  value={complaintForm[field]}
-                  onChange={(e) =>
-                    setComplaintForm((f) => ({ ...f, [field]: e.target.value }))
-                  }
-                  placeholder={
-                    field === "name"
-                      ? "Full Name"
-                      : field === "permanent_address"
-                        ? "Permanent Address"
-                        : field === "temporary_address"
-                          ? "Temporary Address"
-                          : field === "citizenship_no"
-                            ? "Citizenship No."
-                            : field === "phone"
-                              ? "Phone"
-                              : "Email"
-                  }
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid oklch(0.25 0.02 260)",
-                    background: "oklch(0.16 0.01 260)",
-                    color: "oklch(0.88 0.02 80)",
-                    fontSize: "13px",
-                    outline: "none",
-                    fontFamily: "Inter, system-ui, sans-serif",
-                    boxSizing: "border-box",
-                  }}
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleInputKeyDown}
+                  placeholder="Ask anything…"
+                  className="flex-1 bg-transparent py-2.5 font-serif italic text-base text-deep placeholder:text-ink/40 placeholder:italic outline-none"
                 />
-              ))}
-
-              <textarea
-                value={complaintForm.description}
-                onChange={(e) =>
-                  setComplaintForm((f) => ({ ...f, description: e.target.value }))
-                }
-                placeholder="Describe the complaint in detail..."
-                style={{
-                  width: "100%",
-                  minHeight: "120px",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: "1px solid oklch(0.25 0.02 260)",
-                  background: "oklch(0.16 0.01 260)",
-                  color: "oklch(0.88 0.02 80)",
-                  fontFamily: "Inter, system-ui, sans-serif",
-                  fontSize: "13px",
-                  resize: "vertical",
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
-              />
-
-              <button
-                onClick={handleDraftComplaint}
-                disabled={!complaintForm.description.trim() || draftingComplaint}
-                style={{
-                  padding: "10px 20px",
-                  borderRadius: "8px",
-                  border: "none",
-                  background:
-                    !complaintForm.description.trim() || draftingComplaint
-                      ? "oklch(0.2 0.01 260)"
-                      : "oklch(0.72 0.14 85)",
-                  color:
-                    !complaintForm.description.trim() || draftingComplaint
-                      ? "oklch(0.4 0.02 260)"
-                      : "#000",
-                  fontWeight: 600,
-                  cursor:
-                    !complaintForm.description.trim() || draftingComplaint
-                      ? "not-allowed"
-                      : "pointer",
-                  fontSize: "13px",
-                  alignSelf: "flex-start",
-                }}
-              >
-                {draftingComplaint ? "Drafting..." : "📝 Draft Complaint Letter"}
-              </button>
-
-              {complaintPdf && (
                 <button
-                  onClick={handleDownloadComplaint}
-                  style={{
-                    padding: "10px 20px",
-                    borderRadius: "8px",
-                    border: "1px solid oklch(0.72 0.14 85 / 0.4)",
-                    background: "oklch(0.72 0.14 85 / 0.1)",
-                    color: "oklch(0.72 0.14 85)",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    fontSize: "13px",
-                    alignSelf: "flex-start",
-                  }}
+                  type="submit"
+                  aria-label="Send"
+                  disabled={!input.trim() || loading}
+                  className="grid h-10 w-10 place-items-center rounded-full text-paper transition hover:bg-ink disabled:opacity-40"
+                  style={{ background: input.trim() ? "var(--gold)" : "var(--deep)" }}
                 >
-                  ⬇ Download Complaint Letter (PDF)
+                  <ArrowUp className="h-4 w-4" />
                 </button>
-              )}
+              </form>
+              <p className="mt-3 px-4 text-center font-serif italic text-[12px] leading-relaxed text-ink/55">
+                This is advice by AI and it could be wrong — please don't take this as legal advice and
+                consult with a legal attorney for cross verification.
+              </p>
             </div>
-          )}
-        </div>
-
-        {/* ── Chat Input Bar (always present) ── */}
-        <div
-          style={{
-            padding: "10px 20px 16px",
-            borderTop: "1px solid oklch(0.2 0.01 260)",
-            display: "flex",
-            gap: "8px",
-          }}
-        >
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-              }
-            }}
-            placeholder="Ask the Digital Lawyer anything..."
-            style={{
-              flex: 1,
-              padding: "10px 14px",
-              borderRadius: "8px",
-              border: "1px solid oklch(0.25 0.02 260)",
-              background: "oklch(0.16 0.01 260)",
-              color: "oklch(0.88 0.02 80)",
-              fontFamily: "Inter, system-ui, sans-serif",
-              fontSize: "13px",
-              outline: "none",
-            }}
-          />
-          <button
-            onClick={sendMessage}
-            disabled={!input.trim() || loading}
-            style={{
-              padding: "10px 18px",
-              borderRadius: "8px",
-              border: "none",
-              background:
-                !input.trim() || loading
-                  ? "oklch(0.2 0.01 260)"
-                  : "oklch(0.72 0.14 85)",
-              color:
-                !input.trim() || loading ? "oklch(0.4 0.02 260)" : "#000",
-              fontWeight: 600,
-              cursor:
-                !input.trim() || loading ? "not-allowed" : "pointer",
-              fontSize: "13px",
-            }}
-          >
-            Send
-          </button>
-        </div>
+          </div>
+        </main>
       </div>
+
+      {/* ── Footer ── */}
+      <footer className="mx-3 mt-3 mb-3 flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 py-3 font-mono text-[10px] uppercase tracking-[0.2em] text-ink/40">
+        <span>© KaloKoT Chambers</span>
+        <span className="flex items-center gap-2">
+          <Circle className="h-2 w-2 fill-gold text-gold" />
+          Session encrypted
+        </span>
+      </footer>
     </div>
   );
 }
 
+// ── Route definition ───────────────────────────────
+
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Kalokot — AI Legal Companion" },
+      { name: "description", content: "Ask Kalokot about tenders, FAQs, complaints and case analysis." },
+    ],
+  }),
   component: HomePage,
 });

@@ -8,16 +8,35 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import Optional
+import time
+from functools import wraps
+from typing import Optional, Any
 
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types as genai_types
     HAS_GEMINI = True
 except ImportError:
     HAS_GEMINI = False
 
 
 _DEFAULT_PHI_MODEL = "microsoft/Phi-3-mini-4k-instruct"
+
+
+def retry_on_error(max_retries: int = 3, delay: float = 1.0, backoff: float = 2.0):
+    """Decorator for exponential backoff retry on LLM calls."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception:
+                    if attempt == max_retries - 1:
+                        raise
+                    time.sleep(delay * (backoff ** attempt))
+        return wrapper
+    return decorator
 
 
 class LLMClient:
@@ -48,10 +67,12 @@ class LLMClient:
                     "GEMINI_API_KEY not set. Set it in .env or pass via env var."
                 )
             if not HAS_GEMINI:
-                raise ImportError("google-generativeai not installed. Run: pip install google-generativeai")
-            genai.configure(api_key=api_key)
+                raise ImportError("google-genai not installed. Run: pip install google-genai")
+            self._gemini_client = genai.Client(
+                api_key=api_key,
+                http_options={"timeout": 120_000},  # 120s — generous for multi-page analysis
+            )
             self.model_name = model or "gemini-2.5-flash"
-            self.client = genai.GenerativeModel(self.model_name)
 
         elif provider == "anthropic":
             api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -214,100 +235,369 @@ class LLMClient:
     def generate(self, system_prompt: str, user_prompt: str,
                  temperature: float = 0.3, max_tokens: int = 4096) -> str:
         """Send a prompt and get a text response."""
-        if self.provider == "gemini":
-            response = self.client.generate_content(
-                f"{system_prompt}\n\n{user_prompt}",
-                generation_config=genai.types.GenerationConfig(
+        @retry_on_error(max_retries=3, delay=1.0, backoff=2.0)
+        def _call() -> str:
+            if self.provider == "gemini":
+                combined = f"{system_prompt}\n\n{user_prompt}"
+                response = self._gemini_client.models.generate_content(
+                    model=self.model_name,
+                    contents=combined,
+                    config=genai_types.GenerateContentConfig(
+                        temperature=temperature,
+                        max_output_tokens=max_tokens,
+                    ),
+                )
+                return response.text if hasattr(response, "text") else str(response)
+
+            elif self.provider == "anthropic":
+                response = self.client.messages.create(
+                    model=self.model_name,
+                    max_tokens=max_tokens,
                     temperature=temperature,
-                    max_output_tokens=max_tokens,
-                ),
-            )
-            return response.text if hasattr(response, "text") else str(response)
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_prompt}],
+                )
+                return response.content[0].text
 
-        elif self.provider == "anthropic":
-            response = self.client.messages.create(
-                model=self.model_name,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-            return response.content[0].text
+            elif self.provider == "openrouter":
+                import requests
+                resp = self._http_session.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self._api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": self.model_name,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                    },
+                    timeout=120,
+                )
+                resp.raise_for_status()
+                return resp.json()["choices"][0]["message"]["content"]
 
-        elif self.provider == "openrouter":
-            import requests
-            resp = self._http_session.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self._api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": self.model_name,
-                    "messages": [
+            elif self.provider == "openai":
+                resp = self._openai_client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
                     ],
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                },
-                timeout=120,
-            )
-            resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+                return resp.choices[0].message.content
 
-        elif self.provider == "openai":
-            resp = self._openai_client.chat.completions.create(
-                model=self.model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            return resp.choices[0].message.content
+            elif self.provider == "phi":
+                combined = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
+                return self._phi_generate(combined, temperature, max_tokens)
 
-        elif self.provider == "phi":
-            combined = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
-            return self._phi_generate(combined, temperature, max_tokens)
+            raise ValueError(f"Unhandled provider: {self.provider}")
 
-        raise ValueError(f"Unhandled provider: {self.provider}")
+        return _call()
 
     def generate_structured(self, system_prompt: str, user_prompt: str,
                             output_schema: dict, temperature: float = 0.1) -> dict:
         """Send a prompt and get a structured JSON response according to schema."""
-        if self.provider == "gemini":
-            model = genai.GenerativeModel(
-                self.model_name,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=temperature,
-                    response_mime_type="application/json",
-                    response_schema=output_schema,
-                ),
-            )
-            response = model.generate_content(
-                f"{system_prompt}\n\n{user_prompt}"
-            )
-            if hasattr(response, "text"):
-                return json.loads(response.text)
-            return json.loads(str(response))
+        @retry_on_error(max_retries=3, delay=1.0, backoff=2.0)
+        def _call() -> dict:
+            if self.provider == "gemini":
+                combined = f"{system_prompt}\n\n{user_prompt}"
+                response = self._gemini_client.models.generate_content(
+                    model=self.model_name,
+                    contents=combined,
+                    config=genai_types.GenerateContentConfig(
+                        temperature=temperature,
+                        response_mime_type="application/json",
+                        response_schema=output_schema,
+                    ),
+                )
+                if hasattr(response, "text") and response.text:
+                    return json.loads(response.text)
+                return json.loads(str(response))
 
-        elif self.provider == "phi":
-            schema_instruction = (
-                f"{system_prompt}\n\n"
-                f"CRITICAL: You MUST respond with valid JSON matching this schema:\n"
-                f"{json.dumps(output_schema, indent=2)}\n\n"
-                f"Respond with ONLY the JSON object. No markdown, no explanation."
-            )
-            combined = f"{schema_instruction}\n\n{user_prompt}"
-            result = self._phi_generate(combined, temperature, max_tokens=2048)
-            result = self._extract_json(result)
-            return json.loads(result)
+            elif self.provider == "phi":
+                schema_instruction = (
+                    f"{system_prompt}\n\n"
+                    f"CRITICAL: You MUST respond with valid JSON matching this schema:\n"
+                    f"{json.dumps(output_schema, indent=2)}\n\n"
+                    f"Respond with ONLY the JSON object. No markdown, no explanation."
+                )
+                combined = f"{schema_instruction}\n\n{user_prompt}"
+                result = self._phi_generate(combined, temperature, max_tokens=2048)
+                result = self._extract_json(result)
+                return json.loads(result)
 
-        else:
-            # Non-Gemini providers: ask for JSON in system prompt
-            enhanced_prompt = f"{system_prompt}\n\nCRITICAL: You MUST respond with valid JSON matching this schema:\n{json.dumps(output_schema, indent=2)}"
-            result = self.generate(enhanced_prompt, user_prompt, temperature=temperature)
-            result = self._extract_json(result)
-            return json.loads(result.strip())
+            else:
+                # Non-Gemini providers: ask for JSON in system prompt
+                enhanced_prompt = f"{system_prompt}\n\nCRITICAL: You MUST respond with valid JSON matching this schema:\n{json.dumps(output_schema, indent=2)}"
+                result = self.generate(enhanced_prompt, user_prompt, temperature=temperature)
+                result = self._extract_json(result)
+                return json.loads(result.strip())
+
+        return _call()
+
+    # ── Vision / OCR ─────────────────────────────────────────────────────────────
+
+    def extract_text_from_image(self, image_data: bytes, mime_type: str = "image/png") -> str:
+        """Extract text from an image using Gemini vision (OCR).
+
+        Only works with the 'gemini' provider.
+        """
+        if self.provider != "gemini":
+            raise ValueError("Image OCR is only available with the 'gemini' provider")
+
+        import base64
+
+        img_part = genai_types.Part.from_bytes(
+            data=image_data,
+            mime_type=mime_type,
+        )
+
+        response = self._gemini_client.models.generate_content(
+            model=self.model_name,
+            contents=[
+                "Extract all text from this tender document image. "
+                "Return ONLY the extracted text as plain text — no commentary, "
+                "no markdown, no formatting. Preserve the original language and "
+                "as much layout information (paragraphs, sections, numbers) as possible.",
+                img_part,
+            ],
+            config=genai_types.GenerateContentConfig(
+                temperature=0.1,
+                max_output_tokens=8192,
+            ),
+        )
+
+        return response.text if hasattr(response, "text") else str(response)
+
+    # ── Vision / OCR ─────────────────────────────────────────────────────────────
+
+
+# ── Fallback LLM Client ─────────────────────────────────────────────────────────
+
+
+class FallbackLLMClient:
+    """LLM client that automatically falls back to alternative providers on rate limits."""
+
+    def __init__(
+        self,
+        primary: str,
+        fallbacks: list[str],
+        model: Optional[str] = None,
+        phi_model: Optional[str] = None,
+    ):
+        self.primary = primary
+        self.fallbacks = fallbacks
+        self.model = model
+        self.phi_model = phi_model
+        self._clients: dict[str, LLMClient] = {}
+        self._init_clients()
+
+    def _init_clients(self):
+        """Initialize all available clients."""
+        all_providers = [self.primary] + self.fallbacks
+        for p in all_providers:
+            try:
+                if p == "gemini" and os.environ.get("GEMINI_API_KEY"):
+                    self._clients[p] = LLMClient(provider="gemini", model=self.model or "gemini-2.5-flash")
+                elif p == "openrouter" and os.environ.get("OPENROUTER_API_KEY"):
+                    self._clients[p] = LLMClient(provider="openrouter", model=self.model or "anthropic/claude-sonnet-4")
+                elif p == "anthropic" and os.environ.get("ANTHROPIC_API_KEY"):
+                    self._clients[p] = LLMClient(provider="anthropic", model=self.model or "claude-sonnet-4-20250514")
+                elif p == "openai" and os.environ.get("OPENAI_API_KEY"):
+                    self._clients[p] = LLMClient(provider="openai", model=self.model or "gpt-4o-mini")
+            except Exception as e:
+                print(f"[FallbackLLM] Failed to initialize {p}: {e}")
+
+    def _is_rate_limit_error(self, error: Exception) -> bool:
+        """Check if error is a rate limit / quota exhausted error."""
+        error_str = str(error).lower()
+        return any(
+            keyword in error_str
+            for keyword in [
+                "429",
+                "rate limit",
+                "quota exhausted",
+                "resource exhausted",
+                "too many requests",
+                "rate_limit",
+            ]
+        )
+
+    def generate(self, system_prompt: str, user_prompt: str, temperature: float = 0.3, max_tokens: int = 4096) -> str:
+        """Try primary provider, fall back on rate limit errors."""
+        providers = [self.primary] + self.fallbacks
+        last_error = None
+
+        for p in providers:
+            client = self._clients.get(p)
+            if not client:
+                continue
+            try:
+                return client.generate(system_prompt, user_prompt, temperature, max_tokens)
+            except Exception as e:
+                last_error = e
+                if self._is_rate_limit_error(e):
+                    print(f"[FallbackLLM] {p} rate limited, trying next provider...")
+                    continue
+                # Non-rate-limit error - re-raise
+                raise
+
+        # All providers failed
+        raise last_error or RuntimeError("No LLM providers available")
+
+    def generate_structured(self, system_prompt: str, user_prompt: str, output_schema: dict, temperature: float = 0.1) -> dict:
+        """Try primary provider, fall back on rate limit errors."""
+        providers = [self.primary] + self.fallbacks
+        last_error = None
+
+        for p in providers:
+            client = self._clients.get(p)
+            if not client:
+                continue
+            try:
+                return client.generate_structured(system_prompt, user_prompt, output_schema, temperature)
+            except Exception as e:
+                last_error = e
+                if self._is_rate_limit_error(e):
+                    print(f"[FallbackLLM] {p} rate limited (structured), trying next provider...")
+                    continue
+                raise
+
+        raise last_error or RuntimeError("No LLM providers available")
+
+    def extract_text_from_image(self, image_data: bytes, mime_type: str = "image/png") -> str:
+        """Extract text from an image using the primary provider's vision capabilities."""
+        # Only Gemini supports vision/OCR currently
+        for p in [self.primary] + self.fallbacks:
+            client = self._clients.get(p)
+            if not client:
+                print(f"[FallbackLLM] No client for provider: {p}")
+                continue
+            if client.provider == "gemini":
+                try:
+                    return client.extract_text_from_image(image_data, mime_type)
+                except Exception as e:
+                    print(f"[FallbackLLM] Gemini vision failed: {e}")
+                    continue
+            else:
+                print(f"[FallbackLLM] Provider {p} ({client.provider}) doesn't support vision")
+        available = [p for p, c in self._clients.items() if c.provider == "gemini"]
+        raise RuntimeError(
+            f"No Gemini provider available for image OCR. "
+            f"Available Gemini clients: {available}. "
+            f"Set GEMINI_API_KEY and ensure google-genai is installed."
+        )
+
+
+def create_fallback_llm(
+    primary: str,
+    fallbacks: list[str],
+    model: Optional[str] = None,
+    phi_model: Optional[str] = None,
+) -> Any:
+    """Create a FallbackLLMClient with primary and fallback providers."""
+    client = FallbackLLMClient(primary=primary, fallbacks=fallbacks, model=model, phi_model=phi_model)
+    return client if client._clients else None
+
+
+def create_llm_client(
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    phi_model: Optional[str] = None,
+) -> Optional[LLMClient]:
+    """Create an LLMClient by trying providers in a consistent priority order.
+
+    This replaces the separate `get_llm` in main.py and `_get_llm` in api.py
+    to ensure consistent behavior across CLI, Gradio UI, and FastAPI server.
+
+    Priority order:
+      1. Explicit `provider` argument (e.g., "phi", "openai", "gemini", etc.)
+      2. LLM_DEFAULT_PROVIDER env var + corresponding API key
+      3. GEMINI_API_KEY
+      4. OPENROUTER_API_KEY
+      5. ANTHROPIC_API_KEY
+      6. OPENAI_API_KEY (if LLM_DEFAULT_PROVIDER=openai)
+      7. None
+
+    Args:
+        provider: Explicit provider name to use (overrides env var).
+        model: Model name for non-Phi providers.
+        phi_model: Model name for Phi provider.
+
+    Returns:
+        LLMClient instance or None if no provider can be initialized.
+    """
+    # 1. Explicit provider argument
+    if provider:
+        if provider == "phi":
+            return LLMClient(provider="phi", model=phi_model)
+        if provider == "openai" and os.environ.get("OPENAI_API_KEY"):
+            return LLMClient(provider="openai", model=model or "gpt-4o-mini")
+        if provider == "gemini" and os.environ.get("GEMINI_API_KEY"):
+            return LLMClient(provider="gemini", model=model or "gemini-2.5-flash")
+        if provider == "openrouter" and os.environ.get("OPENROUTER_API_KEY"):
+            return LLMClient(provider="openrouter", model=model or "anthropic/claude-sonnet-4")
+        if provider == "anthropic" and os.environ.get("ANTHROPIC_API_KEY"):
+            return LLMClient(provider="anthropic", model=model or "claude-sonnet-4-20250514")
+        # Explicit provider requested but key missing
+        return None
+
+    # 2. LLM_DEFAULT_PROVIDER env var
+    default_provider = os.environ.get("LLM_DEFAULT_PROVIDER", "").lower()
+    if default_provider == "openai" and os.environ.get("OPENAI_API_KEY"):
+        return create_fallback_llm(
+            primary="openai",
+            fallbacks=["anthropic", "gemini", "openrouter"],
+            model=model or "gpt-4o-mini",
+        )
+    if default_provider == "gemini" and os.environ.get("GEMINI_API_KEY"):
+        return create_fallback_llm(
+            primary="gemini",
+            fallbacks=["openrouter", "anthropic", "openai"],
+            model=model or "gemini-2.5-flash",
+        )
+    if default_provider == "openrouter" and os.environ.get("OPENROUTER_API_KEY"):
+        return create_fallback_llm(
+            primary="openrouter",
+            fallbacks=["anthropic", "gemini", "openai"],
+            model=model or "anthropic/claude-sonnet-4",
+        )
+    if default_provider == "anthropic" and os.environ.get("ANTHROPIC_API_KEY"):
+        return create_fallback_llm(
+            primary="anthropic",
+            fallbacks=["gemini", "openrouter", "openai"],
+            model=model or "claude-sonnet-4-20250514",
+        )
+    if default_provider == "phi":
+        return LLMClient(provider="phi", model=phi_model)
+
+    # 3. Auto-detect from available API keys (priority order)
+    if os.environ.get("GEMINI_API_KEY"):
+        return create_fallback_llm(
+            primary="gemini",
+            fallbacks=["openrouter", "anthropic", "openai"],
+            model=model or "gemini-2.5-flash",
+        )
+    if os.environ.get("OPENROUTER_API_KEY"):
+        return create_fallback_llm(
+            primary="openrouter",
+            fallbacks=["anthropic", "gemini", "openai"],
+            model=model or "anthropic/claude-sonnet-4",
+        )
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return create_fallback_llm(
+            primary="anthropic",
+            fallbacks=["gemini", "openrouter", "openai"],
+            model=model or "claude-sonnet-4-20250514",
+        )
+    if os.environ.get("OPENAI_API_KEY"):
+        return LLMClient(provider="openai", model=model or "gpt-4o-mini")
+
+    return None
