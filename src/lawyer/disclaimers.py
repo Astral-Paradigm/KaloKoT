@@ -1,7 +1,15 @@
-"""Disclaimers for the Virtual Lawyer — jurisdiction-specific + generic."""
+"""Disclaimers for the Virtual Lawyer — jurisdiction-specific and generic legal notices.
+
+The standard disclaimer is always appended to every counsel response.
+Jurisdiction-specific disclaimers (e.g. Nepal) add extra context about local
+laws and their limitations.  Consumers should call :func:`get_disclaimer`
+with the resolved jurisdiction code.
+"""
 
 from ..shared.models import JurisdictionCode
 
+
+# ── Generic AI-guidance disclaimer (always shown) ─────────────────────────
 
 STANDARD_DISCLAIMER = (
     "⚠️ AI-GENERATED LEGAL GUIDANCE — NOT LEGAL ADVICE ⚠️\n"
@@ -19,6 +27,8 @@ STANDARD_DISCLAIMER = (
 )
 
 
+# ── Jurisdiction-specific override disclaimers ────────────────────────────
+
 JURISDICTION_DISCLAIMERS = {
     JurisdictionCode.NEPAL: (
         "Nepal-specific disclaimer:\n"
@@ -35,7 +45,17 @@ JURISDICTION_DISCLAIMERS = {
 
 
 def get_disclaimer(jurisdiction: JurisdictionCode = JurisdictionCode.UNKNOWN) -> str:
-    """Get the appropriate disclaimer for the jurisdiction."""
+    """Get the appropriate disclaimer text for the given jurisdiction.
+
+    Always includes the standard AI-guidance disclaimer.  If a
+    jurisdiction-specific block exists for *jurisdiction*, it is appended.
+
+    Args:
+        jurisdiction: The resolved jurisdiction code (default UNKNOWN → generic).
+
+    Returns:
+        Full disclaimer string.
+    """
     parts = [STANDARD_DISCLAIMER]
     specific = JURISDICTION_DISCLAIMERS.get(jurisdiction)
     if specific:

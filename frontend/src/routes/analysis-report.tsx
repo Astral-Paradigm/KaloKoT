@@ -1,3 +1,13 @@
+/* ===================================================================
+ * KaloKoT — Analysis Report
+ *
+ * Detailed corruption‑risk analysis of a tender with:
+ *   - Q&A breakdown
+ *   - PDF page‑level findings
+ *   - Evidence checklist
+ *   - Exportable complaint
+ * =================================================================== */
+
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -12,6 +22,8 @@ import {
   Printer,
 } from "lucide-react";
 import { Backdrop } from "@/components/lawyer/Backdrop";
+
+// ── Route (SEO meta) ───────────────────────────────
 
 export const Route = createFileRoute("/analysis-report")({
   head: () => ({
@@ -33,86 +45,103 @@ export const Route = createFileRoute("/analysis-report")({
   component: AnalysisReport,
 });
 
+// ── Types ──────────────────────────────────────────
+
 type Risk = "high" | "medium" | "low";
 
+// ── Static data ────────────────────────────────────
+
 const riskTone: Record<Risk, { label: string; color: string; bg: string }> = {
-  high: { label: "High risk", color: "#ff7a7a", bg: "rgba(255,80,80,0.12)" },
-  medium: { label: "Medium risk", color: "#f0c36d", bg: "rgba(240,195,109,0.12)" },
-  low: { label: "Low risk", color: "#9ad7a4", bg: "rgba(154,215,164,0.12)" },
+  high:   { label: "High risk",    color: "#ff7a7a", bg: "rgba(255,80,80,0.12)" },
+  medium: { label: "Medium risk",  color: "#f0c36d", bg: "rgba(240,195,109,0.12)" },
+  low:    { label: "Low risk",     color: "#9ad7a4", bg: "rgba(154,215,164,0.12)" },
 };
 
-const qa = [
+/** Structured Q&A breakdowns, each with a risk rating and legal citation. */
+const qa: {
+  q: string;
+  a: string;
+  risk: Risk;
+  law: string;
+}[] = [
   {
     q: "Who is the issuing authority and is the scope clearly defined?",
     a: "The tender is issued by the District Public Works Department. Scope language is vague — uses 'allied works' without itemisation, leaving room for unbounded change orders.",
-    risk: "medium" as Risk,
+    risk: "medium",
     law: "Rule 173, GFR 2017 — scope and quantities must be specific.",
   },
   {
     q: "Is the eligibility criteria fair and non-restrictive?",
     a: "Turnover threshold (₹25 Cr) and single-work experience clause appear tailored — only 2 bidders in the district can satisfy both. Classic restrictive-eligibility pattern.",
-    risk: "high" as Risk,
+    risk: "high",
     law: "CVC Circular 03/01/12 — tailored eligibility = cartelisation flag.",
   },
   {
     q: "Is the timeline reasonable for serious bidders?",
     a: "Bid submission window is 7 days from publication. Standard for works of this value is 21 days minimum.",
-    risk: "high" as Risk,
+    risk: "high",
     law: "Manual for Procurement of Works 2022, §4.6.2.",
   },
   {
     q: "Are evaluation criteria objective and pre-disclosed?",
     a: "Technical evaluation includes a 30% 'subjective suitability' weight with no rubric. This is the single largest manipulation vector in the document.",
-    risk: "high" as Risk,
+    risk: "high",
     law: "GFR Rule 173(iv) — evaluation criteria must be objective and measurable.",
   },
   {
     q: "Are EMD and performance security clauses standard?",
     a: "EMD of 5% is on the higher end but within bounds. Performance security at 10% is standard.",
-    risk: "low" as Risk,
+    risk: "low",
     law: "GFR Rule 170 — within permitted range.",
   },
 ];
 
-const pdfFindings = [
+/** Page‑level findings extracted from the PDF. */
+const pdfFindings: {
+  title: string;
+  page: string;
+  detail: string;
+  risk: Risk;
+}[] = [
   {
     title: "Restrictive eligibility clause",
     page: "p. 4, §2.3",
     detail:
       "Requires single completed work ≥ ₹18 Cr in the same district in the last 3 years — geographically narrows the bidder pool to a known set.",
-    risk: "high" as Risk,
+    risk: "high",
   },
   {
     title: "Short bid window",
     page: "p. 2, §1.4",
     detail:
       "Only 7 calendar days between publication and bid submission deadline.",
-    risk: "high" as Risk,
+    risk: "high",
   },
   {
     title: "Subjective technical scoring",
     page: "p. 9, §5.2",
     detail:
       "30% weightage to 'overall suitability' with no published rubric or sub-criteria.",
-    risk: "high" as Risk,
+    risk: "high",
   },
   {
     title: "Vague scope language",
     page: "p. 6, §3.1",
     detail:
       "'Allied and ancillary works as directed' — enables unbounded change orders post-award.",
-    risk: "medium" as Risk,
+    risk: "medium",
   },
   {
     title: "Unitemised BOQ rows",
     page: "p. 12, BOQ #18–22",
     detail:
       "Lump-sum entries without unit breakdowns prevent line-item comparison.",
-    risk: "medium" as Risk,
+    risk: "medium",
   },
 ];
 
-const evidence = [
+/** Pre‑defined evidence‑collection checklist items. */
+const evidence: { label: string; done: boolean }[] = [
   { label: "Original tender PDF (as published)", done: true },
   { label: "Corrigenda and addenda (if any)", done: true },
   { label: "Pre-bid meeting minutes", done: false },
@@ -123,6 +152,9 @@ const evidence = [
   { label: "RTI reply (if filed) on evaluation criteria", done: false },
 ];
 
+// ── Sub‑components ─────────────────────────────────
+
+/** Inline risk badge pill. */
 function RiskBadge({ risk }: { risk: Risk }) {
   const t = riskTone[risk];
   return (
@@ -136,6 +168,8 @@ function RiskBadge({ risk }: { risk: Risk }) {
   );
 }
 
+// ── Page component ─────────────────────────────────
+
 function AnalysisReport() {
   const highCount = [...qa, ...pdfFindings].filter((x) => x.risk === "high").length;
 
@@ -143,8 +177,8 @@ function AnalysisReport() {
     <main className="relative min-h-screen w-full overflow-x-hidden bg-[color:var(--noir)] text-cream">
       <Backdrop />
 
-      {/* Top bar */}
-      <header className="relative z-20 flex items-center justify-between px-4 py-3 md:px-8 md:py-6">
+      {/* ── Top bar ── */}
+      <header className="relative z-20 flex items-center justify-between px-8 py-6">
         <Link
           to="/"
           className="inline-flex items-center gap-2 text-xs tracking-[0.24em] uppercase transition-colors hover:text-[color:var(--gold)]"
@@ -162,8 +196,8 @@ function AnalysisReport() {
         <span className="w-16" />
       </header>
 
-      <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pb-20 md:px-6 md:pb-24">
-        {/* Title */}
+      <div className="relative z-10 mx-auto w-full max-w-5xl px-6 pb-24">
+        {/* ── Title section ── */}
         <section className="mb-10 text-center">
           <p
             className="mb-3 text-xs tracking-[0.32em] uppercase"
@@ -186,7 +220,7 @@ function AnalysisReport() {
           </p>
         </section>
 
-        {/* Q & A Analysis */}
+        {/* ── Q&A Analysis ── */}
         <section className="mb-10">
           <div className="mb-4 flex items-center gap-2">
             <Scale className="h-4 w-4" style={{ color: "var(--gold)" }} />
@@ -199,8 +233,8 @@ function AnalysisReport() {
           </div>
           <div className="space-y-3">
             {qa.map((item, i) => (
-              <article key={i} className="glass rounded-2xl p-4 md:p-5">
-                <div className="flex items-start justify-between gap-3 md:gap-4">
+              <article key={i} className="glass rounded-2xl p-5">
+                <div className="flex items-start justify-between gap-4">
                   <h3
                     className="text-base font-medium md:text-lg"
                     style={{ color: "var(--cream)" }}
@@ -223,7 +257,7 @@ function AnalysisReport() {
           </div>
         </section>
 
-        {/* PDF analysis */}
+        {/* ── PDF Analysis ── */}
         <section className="mb-10">
           <div className="mb-4 flex items-center gap-2">
             <FileText className="h-4 w-4" style={{ color: "var(--gold)" }} />
@@ -236,8 +270,8 @@ function AnalysisReport() {
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {pdfFindings.map((f, i) => (
-              <article key={i} className="glass rounded-2xl p-4 md:p-5">
-                <div className="flex items-start justify-between gap-2 md:gap-3">
+              <article key={i} className="glass rounded-2xl p-5">
+                <div className="flex items-start justify-between gap-3">
                   <h3 className="text-sm font-medium" style={{ color: "var(--cream)" }}>
                     {f.title}
                   </h3>
@@ -257,7 +291,7 @@ function AnalysisReport() {
           </div>
         </section>
 
-        {/* Evidence checklist */}
+        {/* ── Evidence Checklist ── */}
         <section id="evidence-checklist" className="mb-10 scroll-mt-24">
           <div className="mb-4 flex items-center gap-2">
             <ClipboardCheck className="h-4 w-4" style={{ color: "var(--gold)" }} />
@@ -268,7 +302,7 @@ function AnalysisReport() {
               Evidence checklist
             </h2>
           </div>
-          <div className="glass rounded-2xl p-4 md:p-6">
+          <div className="glass rounded-2xl p-6">
             <ul className="grid gap-3 md:grid-cols-2">
               {evidence.map((e, i) => (
                 <li key={i} className="flex items-start gap-3">
@@ -287,7 +321,7 @@ function AnalysisReport() {
                     className="text-sm"
                     style={{
                       color: e.done ? "var(--cream)" : "var(--muted-ink)",
-                      textDecoration: e.done ? "none" : "none",
+                      textDecoration: "none",
                     }}
                   >
                     {e.label}
@@ -298,7 +332,7 @@ function AnalysisReport() {
           </div>
         </section>
 
-        {/* Export complaint */}
+        {/* ── Export Complaint ── */}
         <section id="export-complaint" className="scroll-mt-24">
           <div className="mb-4 flex items-center gap-2">
             <FileDown className="h-4 w-4" style={{ color: "var(--gold)" }} />
@@ -309,12 +343,12 @@ function AnalysisReport() {
               Export complaint
             </h2>
           </div>
-                    <div className="glass rounded-2xl p-4 md:p-6">
+          <div className="glass rounded-2xl p-6">
             <p
               className="text-sm"
               style={{ color: "var(--muted-ink)" }}
             >
-              A pre-filled complaint addressed to the {" "}
+              A pre-filled complaint addressed to the{" "}
               <span style={{ color: "var(--cream)" }}>
                 Central Vigilance Commission
               </span>{" "}
@@ -326,10 +360,10 @@ function AnalysisReport() {
               references. Review it once before filing.
             </p>
 
-            <div className="flex flex-col gap-3 md:flex-row md:flex-wrap">
+            <div className="mt-5 flex flex-wrap gap-3">
               <button
                 type="button"
-                className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-transform hover:scale-[1.02]"
+                className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-transform hover:scale-[1.02]"
                 style={{
                   background:
                     "linear-gradient(135deg, var(--gold), oklch(0.62 0.13 70))",
@@ -343,7 +377,7 @@ function AnalysisReport() {
               </button>
               <button
                 type="button"
-                className="glass inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-cream transition-all hover:scale-[1.02]"
+                className="glass inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-cream transition-all hover:scale-[1.02]"
                 style={{ color: "var(--cream)" }}
               >
                 <Printer className="h-4 w-4" style={{ color: "var(--gold)" }} />

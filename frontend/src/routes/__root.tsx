@@ -1,3 +1,12 @@
+/* ===================================================================
+ * KaloKoT Root Layout
+ *
+ * Shell component that wraps every page with
+ *   - TanStack Query provider
+ *   - Global head meta tags (fonts, viewport, OG)
+ *   - 404 & error boundary fallbacks
+ * =================================================================== */
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -11,6 +20,8 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+
+// ── 404 page ───────────────────────────────────────
 
 function NotFoundComponent() {
   return (
@@ -33,6 +44,8 @@ function NotFoundComponent() {
     </div>
   );
 }
+
+// ── Error boundary ─────────────────────────────────
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
@@ -72,6 +85,8 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
+// ── Route definition ───────────────────────────────
+
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
@@ -102,7 +117,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Inter:wght@400;500;600&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap",
       },
       { rel: "stylesheet", href: appCss },
     ],
@@ -112,6 +127,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,
 });
+
+// ── Shell (html/head/body wrapper) ─────────────────
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
@@ -126,6 +143,8 @@ function RootShell({ children }: { children: ReactNode }) {
     </html>
   );
 }
+
+// ── Root component (providers + outlet) ────────────
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();

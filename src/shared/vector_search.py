@@ -13,7 +13,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -22,19 +22,6 @@ def _tokenize(text: str) -> List[str]:
     """Lowercase, split on non-alpha, return tokens >= 2 chars."""
     tokens = re.findall(r"[a-z]{2,}", text.lower())
     return tokens
-
-
-STOP_WORDS: set = {
-    "the", "a", "an", "in", "of", "to", "for", "and", "or", "is",
-    "are", "was", "were", "be", "been", "being", "have", "has",
-    "had", "do", "does", "did", "will", "would", "can", "could",
-    "shall", "should", "may", "might", "this", "that", "these",
-    "those", "it", "its", "at", "by", "with", "from", "as",
-    "on", "not", "no", "but", "if", "so", "than", "too",
-    "very", "just", "about", "also", "any", "each", "all",
-    "section", "act", "regulation", "provision", "clause",
-    "pursuant", "according", "hereby", "thereof", "thereto",
-}
 
 
 class TfidfVectorizer:
@@ -125,16 +112,23 @@ class LegalVectorSearch:
                 "label": flag.get("label", ""),
             })
 
-        # Index templates
-        for tmpl_id, tmpl in yaml_data.get("templates", {}).items():
+        # Due to historical library mismatches between the template
+        # YAML format and expected dict format, convert to dict if needed.
+        templates_raw = yaml_data.get("templates", [])
+        if isinstance(templates_raw, dict):
+            templates_list = list(templates_raw.values())
+        else:
+            templates_list = templates_raw or []
+
+        for tmpl in templates_list:
             if not isinstance(tmpl, dict):
                 continue
             text = tmpl.get("title", "") + "\n" + tmpl.get("body", "")
             self._corpus.append(text)
             self._corpus_meta.append({
                 "type": "template",
-                "id": tmpl.get("id", tmpl_id),
-                "label": tmpl.get("template_name", tmpl_id),
+                "id": tmpl.get("id", ""),
+                "label": tmpl.get("template_name", ""),
             })
 
         # Index oversight bodies
@@ -191,9 +185,10 @@ class LegalVectorSearch:
         if not self._fitted or self._vectors is None:
             return []
 
+        # Transform query to TF-IDF vector
         query_vec = self._vectorizer.transform([query])
 
-        # Cosine similarity
+        # Cosine similarity: dot product / (||corpus|| * ||query||)
         dot = self._vectors @ query_vec.T
         norm_corpus = np.linalg.norm(self._vectors, axis=1, keepdims=True)
         norm_query = np.linalg.norm(query_vec)
@@ -201,7 +196,7 @@ class LegalVectorSearch:
         denom[denom == 0] = 1.0  # avoid div by zero
         similarities = (dot / denom).flatten()
 
-        # Sort by similarity
+        # Sort descending by similarity score
         indices = np.argsort(similarities)[::-1]
 
         results = []
@@ -231,8 +226,10 @@ class LegalVectorSearch:
         Gives a score boost to results whose text contains query terms
         (exact word matches), improving precision for technical legal terms.
         """
+        # Fetch more candidates (2x) so keyword scoring can re-rank
         results = self.search(query, top_k=top_k * 2, threshold=threshold)
 
+        # Extract significant query terms (3+ chars) for keyword matching
         query_terms = set(re.findall(r"[a-z]{3,}", query.lower()))
 
         for r in results:
@@ -241,5 +238,6 @@ class LegalVectorSearch:
             r["score"] = min(1.0, r["score"] + keyword_bonus * matches)
             r["keyword_matches"] = matches
 
+        # Re-rank by boosted score and trim to requested top_k
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:top_k]

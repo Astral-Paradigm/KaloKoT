@@ -1,4 +1,8 @@
-"""Shared Pydantic data models for OpenTender + Counsel."""
+"""Shared Pydantic data models for OpenTender + Counsel.
+
+All request/response types used across the system live here:
+tender risk analysis, legal counsel, complaint drafts, and vendor assessments.
+"""
 
 from __future__ import annotations
 
@@ -7,12 +11,16 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
+# ── Enums ────────────────────────────────────────────────────────────
+
 class JurisdictionCode(str, Enum):
+    """Supported legal jurisdictions."""
     NEPAL = "np"
     UNKNOWN = "unknown"
 
 
 class TenderSection(str, Enum):
+    """Known sections within a tender document."""
     DETAILS = "details"
     SPECIFICATION = "specification"
     BUDGET = "budget"
@@ -22,6 +30,7 @@ class TenderSection(str, Enum):
 
 
 class Severity(str, Enum):
+    """Severity level for a flagged clause in a tender."""
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -29,12 +38,16 @@ class Severity(str, Enum):
 
 
 class RiskLevel(str, Enum):
+    """Overall risk indicator for a tender or vendor."""
     GREEN = "green"
     YELLOW = "yellow"
     RED = "red"
 
 
+# ── Tender / Risk Analysis ───────────────────────────────────────────
+
 class TenderSectionData(BaseModel):
+    """One parsed section from a tender document."""
     section: TenderSection
     heading: str
     content: str
@@ -59,10 +72,11 @@ class FlaggedClause(BaseModel):
     red_flag_id: str
     label: str
     severity: Severity
-    description: str
-    location: str  # e.g., "Section 7.3, Page 12"
-    excerpt: str  # the actual text from the tender
+    description: str                               # what was found
+    location: str                                  # e.g. "Section 7.3, Page 12"
+    excerpt: str                                   # actual text from the tender
     law_reference: Optional[str] = None
+    risk_reason: str = ""                          # WHY it's a corruption risk
     suggestion: str = ""
 
 
@@ -75,13 +89,15 @@ class RiskReport(BaseModel):
     summary: str = ""
 
 
+# ── Legal & Counsel ──────────────────────────────────────────────────
+
 class LegalArticle(BaseModel):
     """A specific law/regulation article from the legal corpus."""
     jurisdiction: JurisdictionCode
     article_id: str
     label: str
     description: str
-    source: str  # e.g., "Public Procurement Act 2063, Section 18"
+    source: str                                    # e.g. "Public Procurement Act 2063, Section 18"
     text: str
     penalty: Optional[str] = None
     action: str = ""
@@ -90,7 +106,7 @@ class LegalArticle(BaseModel):
 
 class CounselRequest(BaseModel):
     """Request to the Virtual Lawyer."""
-    tender_context: str  # tender summary / red flags
+    tender_context: str                            # tender summary / red flags
     question: str
     jurisdiction: JurisdictionCode = JurisdictionCode.UNKNOWN
     risk_report: Optional[RiskReport] = None
@@ -107,7 +123,7 @@ class CounselResponse(BaseModel):
 
 
 class ComplaintDraft(BaseModel):
-    """A generated complaint/FOIA/RTI draft."""
+    """A generated complaint / FOIA / RTI draft."""
     title: str
     jurisdiction: JurisdictionCode
     body: str
@@ -115,8 +131,10 @@ class ComplaintDraft(BaseModel):
     instructions: str = ""
 
 
+# ── Vendor & Risk Assessment ─────────────────────────────────────────
+
 class VendorAssessment(BaseModel):
-    """Vendor/contractor risk assessment result."""
+    """Vendor / contractor risk assessment result."""
     vendor_name: str
     overall_risk: RiskLevel
     flags: list = Field(default_factory=list)

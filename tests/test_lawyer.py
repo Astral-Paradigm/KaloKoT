@@ -59,7 +59,8 @@ class TestJurisdictionLoader:
         """Nepal's KB should include complaint templates."""
         templates = loader.get_templates(JurisdictionCode.NEPAL)
         assert len(templates) >= 1
-        assert "complaint_ppmo" in templates
+        # Check a specific template exists by its id field
+        assert any(t.get("id") == "complaint_ppmo" for t in templates)
 
     def test_load_unknown_raises(self, loader):
         """Loading an unknown jurisdiction should raise FileNotFoundError."""

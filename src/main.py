@@ -24,6 +24,15 @@ except ImportError:
 # Ensure project root is in sys.path so imports work consistently
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+# Configure logging
+import logging
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger("justice")
+
 import yaml
 
 from src.analyzer import TenderExtractor, TenderParser, RiskScorer, ReportGenerator
@@ -32,27 +41,23 @@ from src.shared.llm import LLMClient
 from src.shared.jurisdiction import JurisdictionLoader
 from src.shared.chunker import DocumentChunker, DocumentChunk
 from src.shared.chunking import chunk_constitution
+from src.shared.llm import LLMClient, create_llm_client
 from src.shared.chroma_store import ChromaLegalStore
 
-
+# Backward compatibility wrapper for CLI/Gradio
 def get_llm(provider: str | None = None,
             phi_model: str | None = None) -> LLMClient | None:
-    """Initialize LLM client from provider flag or available API keys."""
-    if provider == "phi":
-        return LLMClient(provider="phi", model=phi_model)
-    if os.environ.get("GEMINI_API_KEY"):
-        return LLMClient(provider="gemini", model="gemini-2.5-flash")
-    elif os.environ.get("OPENROUTER_API_KEY"):
-        return LLMClient(provider="openrouter", model="anthropic/claude-sonnet-4")
-    elif os.environ.get("ANTHROPIC_API_KEY"):
-        return LLMClient(provider="anthropic", model="claude-sonnet-4-20250514")
-    return None
+    """Initialize LLM client from provider flag or available API keys.
+    
+    Delegates to the unified factory in src.shared.llm.
+    """
+    return create_llm_client(provider=provider, phi_model=phi_model)
 
 
 def run_cli(file_path: str, no_llm: bool = False,
             provider: str | None = None, phi_model: str | None = None):
     """Run analysis in CLI mode."""
-    print("🛡️  OpenTender + Counsel — Procurement Corruption Analyzer\n")
+    logger.info("OpenTender + Counsel — Procurement Corruption Analyzer")
 
     # Initialize
     llm = None if no_llm else get_llm(provider, phi_model)
@@ -61,23 +66,29 @@ def run_cli(file_path: str, no_llm: bool = False,
         print("   Set GEMINI_API_KEY, OPENROUTER_API_KEY, or ANTHROPIC_API_KEY in .env\n")
 
     extractor = TenderExtractor()
-    parser = TenderParser(llm) if llm else TenderParser.__new__(TenderParser)
+    # Check if file is an image and warn about LLM requirement
+    if file_path.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp')):
+        if not llm:
+            print("⚠️  Image OCR requires an LLM (Gemini). Set GEMINI_API_KEY in .env")
+            return
+    # When no LLM is available, set parser to None and handle explicitly
+    parser = TenderParser(llm) if llm else None
     scorer = RiskScorer()
     reporter = ReportGenerator()
     loader = JurisdictionLoader()
     chunker = DocumentChunker()
 
     # Extract
-    print(f"📄 Extracting: {file_path}")
+    logger.info(f"Extracting: {file_path}")
     raw_text = extractor.from_file(file_path)
-    print(f"   {len(raw_text)} characters extracted\n")
+    logger.info(f"Extracted {len(raw_text)} characters")
 
     # Parse
     if llm:
-        print("🧠 Parsing with LLM...")
+        logger.info("Parsing with LLM...")
         tender = parser.parse(raw_text)
     else:
-        print("⚠️  LLM required for parsing. Using raw text fallback.")
+        logger.warning("LLM required for parsing. Using raw text fallback.")
         from src.shared.models import TenderDocument
         tender = TenderDocument(
             title=Path(file_path).stem,
@@ -85,23 +96,23 @@ def run_cli(file_path: str, no_llm: bool = False,
         )
 
     # Score
-    print("🔍 Scoring corruption risk...")
+    logger.info("Scoring corruption risk...")
     report = scorer.score(tender)
 
     # Detect jurisdiction
     jurisdiction = loader.detect_jurisdiction_from_text(raw_text)
     if jurisdiction.value != "unknown":
         meta = loader.get_meta(jurisdiction)
-        print(f"🌍 Detected jurisdiction: {meta.get('country', jurisdiction.value)}")
+        logger.info(f"Detected jurisdiction: {meta.get('country', jurisdiction.value)}")
     else:
-        print("🌍 Jurisdiction not detected from document text.")
+        logger.warning("Jurisdiction not detected from document text.")
 
     # Generate report
     print("\n" + reporter.generate_heatmap(report))
     print(reporter.generate_text(report))
 
     # Evidence checklist
-    print("\n📋 Generate evidence preservation checklist? (y/N): ", end="")
+    logger.info("Prompting for evidence checklist generation")
     try:
         ans = input().strip().lower()
     except (EOFError, KeyboardInterrupt):
@@ -111,8 +122,8 @@ def run_cli(file_path: str, no_llm: bool = False,
         print("\n" + checklist.generate(report, jurisdiction))
 
     # Counsel mode if user asks questions
-    print("\n📋 Type a question for the Virtual Lawyer, or press Enter to skip.")
-    print("   Examples: 'Is it illegal?', 'How do I report this?', 'Draft a complaint'\n")
+    logger.info("Prompting for counsel question")
+    logger.info("Showing counsel examples")
     while True:
         try:
             question = input("❓ > ").strip()
@@ -126,6 +137,19 @@ def run_cli(file_path: str, no_llm: bool = False,
             lawyer = VirtualLawyer(loader, llm)
             from src.shared.models import CounselRequest
 
+            # Search the Constitution via ChromaDB (semantic retrieval)
+            constitution_context = ""
+            try:
+                chroma_store = ChromaLegalStore(
+                    persist_dir=str(Path.home() / ".justice_chromadb")
+                )
+                if chroma_store.count() > 0:
+                    search_results = chroma_store.search(question, top_k=4)
+                    if search_results:
+                        constitution_context = chroma_store.get_search_context(search_results)
+            except Exception:
+                pass
+
             # Build RAG context from chunked document
             chunks = chunker.chunk_text(tender.raw_text[:15000], source=tender.title)
             rag_context = "\n\n---\n\n".join(
@@ -137,12 +161,15 @@ def run_cli(file_path: str, no_llm: bool = False,
                 f"RELEVANT DOCUMENT EXCERPTS:\n{rag_context}"
             )
 
-            response = lawyer.counsel(CounselRequest(
-                tender_context=full_context,
-                question=question,
-                jurisdiction=jurisdiction,
-                risk_report=report,
-            ))
+            response = lawyer.counsel(
+                CounselRequest(
+                    tender_context=full_context,
+                    question=question,
+                    jurisdiction=jurisdiction,
+                    risk_report=report,
+                ),
+                constitution_context=constitution_context,
+            )
             print(f"\n{response.answer}\n")
             if response.citations:
                 print("Citations:")
@@ -186,26 +213,39 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
                 constitution_data = yaml.safe_load(f)
             if constitution_data and "parts" in constitution_data:
                 count = chroma_store.index_constitution(constitution_data)
-                print(f"   ⚖️ Constitution indexed: {count} clauses")
+                logger.info(f"Constitution indexed: {count} clauses")
         except Exception as e:
-            print(f"   ⚠️ Constitution indexing skipped: {e}")
+            logger.warning(f"Constitution indexing skipped: {e}")
     else:
-        print("   ℹ️ Constitution file not found at {constitution_path}")
+        logger.info(f"Constitution file not found at {constitution_path}")
 
-    # UI state
-    tender_cache = {}
+    # UI state — use gr.State for per-session isolation (not module-level dict)
+    tender_state = gr.State({})
 
-    def analyze_tender(file, url):
-        """Analyze uploaded file or URL."""
+    def analyze_tender(file, url, state):
+        """
+        Analyze an uploaded tender file or URL.
+
+        Extracts text, parses it (via LLM if available), scores corruption risk,
+        detects jurisdiction, and returns both a plain-text and an HTML report.
+
+        Args:
+            file: Uploaded file object (Gradio File component), or None.
+            url:  Tender URL string, or empty string.
+            state: gr.State dict holding per-session tender cache.
+
+        Returns:
+            tuple[str, str, dict]: (text_report, html_report, updated_state).
+        """
         try:
             if file is not None:
                 text = extractor.from_file(file.name)
             elif url:
                 text = extractor.from_url(url)
             else:
-                return "Please upload a file or enter a URL.", ""
+                return "Please upload a file or enter a URL.", "", state
 
-            # Parse with LLM or fallback
+            # Parse with LLM or fallback to raw-text placeholder
             if parser:
                 tender = parser.parse(text)
             else:
@@ -214,26 +254,39 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
 
             # Score
             report = scorer.score(tender)
-            tender_cache["report"] = report
+            state["report"] = report
 
             # Detect jurisdiction
             jurisdiction = loader.detect_jurisdiction_from_text(text)
-            tender_cache["jurisdiction"] = jurisdiction
-            tender_cache["tender_text"] = text[:3000]
+            state["jurisdiction"] = jurisdiction
+            state["tender_text"] = text[:3000]
 
             text_report = reporter.generate_text(report)
             html_report = reporter.generate_html(report)
 
-            return text_report, html_report
+            return text_report, html_report, state
         except Exception as e:
-            return f"Error: {e}", ""
+            return f"Error: {e}", "", state
 
-    def counsel_question(question):
-        """Answer a legal question — grounded in constitution law via ChromaDB."""
+    def counsel_question(question, state):
+        """
+        Answer a legal question grounded in constitutional law via ChromaDB RAG.
+
+        Searches the indexed constitution (ChromaDB), builds a full RAG context
+        from the tender report + relevant excerpts, and passes everything to the
+        VirtualLawyer for an AI-generated legal response.
+
+        Args:
+            question: The user's legal question string.
+            state: gr.State dict holding per-session tender cache.
+
+        Returns:
+            tuple[str, dict]: (answer, updated_state).
+        """
         if not question.strip():
-            return "Ask a question about the tender's legal implications."
+            return "Ask a question about the tender's legal implications.", state
 
-        # Search the Constitution via ChromaDB
+        # Search the Constitution via ChromaDB (semantic retrieval)
         constitution_context = ""
         try:
             if chroma_store.count() > 0:
@@ -243,14 +296,14 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
         except Exception:
             pass
 
-        if "report" not in tender_cache:
-            return "Please analyze a tender first."
+        if "report" not in state:
+            return "Please analyze a tender first.", state
 
-        report = tender_cache["report"]
-        jurisdiction = tender_cache["jurisdiction"]
+        report = state["report"]
+        jurisdiction = state["jurisdiction"]
 
         # Build RAG context from chunked document
-        raw = tender_cache.get("tender_text", "")
+        raw = state.get("tender_text", "")
         chunks = chunker.chunk_text(raw, source="uploaded_tender")
         rag_context = "\n\n---\n\n".join(
             f"[chunk {c.chunk_id}] {c.text[:600]}"
@@ -279,7 +332,7 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
         if response.disclaimer:
             answer += f"\n\n—\n{response.disclaimer[:200]}"
 
-        return answer
+        return answer, state
 
     # Build UI
     mascot_html_path = Path(__file__).resolve().parent / "ui" / "mascot.html"
@@ -294,7 +347,7 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
 
         with gr.Tab("📄 Analyze Tender"):
             with gr.Row():
-                file_input = gr.File(label="Upload Tender PDF", file_types=[".pdf", ".txt", ".html"])
+                file_input = gr.File(label="Upload Tender PDF", file_types=[".pdf", ".txt", ".html", ".jpg", ".jpeg", ".png"])
                 url_input = gr.Textbox(label="Or Tender URL", placeholder="https://example.com/tender.pdf")
             analyze_btn = gr.Button("🔍 Analyze", variant="primary")
             with gr.Row():
@@ -303,8 +356,8 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
 
             analyze_btn.click(
                 fn=analyze_tender,
-                inputs=[file_input, url_input],
-                outputs=[text_output, html_output],
+                inputs=[file_input, url_input, tender_state],
+                outputs=[text_output, html_output, tender_state],
             )
 
         with gr.Tab("⚖️ Digital Lawyer"):
@@ -330,15 +383,27 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
                     chat_history = gr.State([])
 
                     def update_mascot_status(question):
+                        """Update the mascot status indicator when a question is submitted."""
                         if not question.strip():
                             return "**Status:** Ready", None
                         return "**Status:** ⚖️ Thinking… analyzing legal framework", None
 
-                    def respond_and_record(question, history):
-                        if not question.strip():
-                            return history, history, "**Status:** Ready"
+                    def respond_and_record(question, history, state):
+                        """
+                        Generate a legal response and record it in the chat history.
 
-                        answer = counsel_question(question)
+                        Args:
+                            question: The user's question string.
+                            history:  Current chat history as list of (question, answer) tuples.
+                            state:    Per-session tender cache.
+
+                        Returns:
+                            tuple: (updated_history, updated_history_for_chatbot, status_markdown, updated_state).
+                        """
+                        if not question.strip():
+                            return history, history, "**Status:** Ready", state
+
+                        answer, state = counsel_question(question, state)
 
                         if not answer or len(answer) < 10 or "error" in answer.lower():
                             status = "**Status:** Ready to help"
@@ -346,7 +411,7 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
                             status = "**Status:** ⚖️ Speaking — providing legal analysis"
 
                         history.append((question, answer))
-                        return history, history, status
+                        return history, history, status, state
 
                     ask_btn.click(
                         fn=update_mascot_status,
@@ -354,8 +419,8 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
                         outputs=[mascot_status, gr.State()],
                     ).then(
                         fn=respond_and_record,
-                        inputs=[question_input, chat_history],
-                        outputs=[chat_history, chatbot, mascot_status],
+                        inputs=[question_input, chat_history, tender_state],
+                        outputs=[chat_history, chatbot, mascot_status, tender_state],
                     ).then(
                         fn=lambda: "",
                         inputs=None,
@@ -369,8 +434,8 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
                         outputs=[mascot_status, gr.State()],
                     ).then(
                         fn=respond_and_record,
-                        inputs=[question_input, chat_history],
-                        outputs=[chat_history, chatbot, mascot_status],
+                        inputs=[question_input, chat_history, tender_state],
+                        outputs=[chat_history, chatbot, mascot_status, tender_state],
                     ).then(
                         fn=lambda: "",
                         inputs=None,
@@ -379,7 +444,6 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
 
         with gr.Tab("📋 Evidence Checklist"):
             with gr.Row():
-                checklist_report_id = gr.Textbox(label="Report ID (from Analyze tab)", placeholder="Paste report ID here")
                 checklist_jurisdiction = gr.Dropdown(
                     label="Jurisdiction",
                     choices=["np", "ke", "za", "ng", "bd"],
@@ -387,9 +451,28 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
                 )
             checklist_btn = gr.Button("📋 Generate Checklist", variant="primary")
             checklist_output = gr.Markdown(label="Evidence Checklist")
-            # Checklist endpoint - simplified version using mock
-            # In production this calls the API
-            gr.Markdown("_Upload a tender and get a report ID above, then generate an evidence checklist here._")
+
+            def generate_checklist(state, jurisdiction):
+                """Generate evidence checklist from the current report."""
+                if "report" not in state:
+                    return "Please analyze a tender first in the 📄 Analyze Tender tab."
+                try:
+                    from src.shared.models import JurisdictionCode
+                    jcode = JurisdictionCode.UNKNOWN
+                    for code in JurisdictionCode:
+                        if code.value == jurisdiction.lower():
+                            jcode = code
+                            break
+                    checklist = EvidenceChecklist(loader)
+                    return checklist.generate(state["report"], jcode)
+                except Exception as e:
+                    return f"Error generating checklist: {e}"
+
+            checklist_btn.click(
+                fn=generate_checklist,
+                inputs=[tender_state, checklist_jurisdiction],
+                outputs=[checklist_output],
+            )
 
         with gr.Tab("📄 Export Complaint"):
             with gr.Row():
@@ -418,7 +501,6 @@ def run_ui(provider: str | None = None, phi_model: str | None = None):
 def main():
     parser = argparse.ArgumentParser(description="OpenTender + Counsel")
     parser.add_argument("--file", "-f", help="Path to tender PDF/txt file for CLI analysis")
-    parser.add_argument("--url", "-u", help="URL to tender document for CLI analysis")
     parser.add_argument("--no-llm", action="store_true", help="Skip LLM calls (rule-based only)")
     parser.add_argument("--ui", action="store_true", default=False, help="Launch Gradio UI")
     parser.add_argument("--api", action="store_true", default=False, help="Launch FastAPI backend")

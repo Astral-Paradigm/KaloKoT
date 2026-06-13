@@ -1,3 +1,10 @@
+/* ===================================================================
+ * KaloKoT Router
+ *
+ * Creates the TanStack Router instance with the auto‑generated
+ * route tree and a shared QueryClient.
+ * =================================================================== */
+
 import { QueryClient } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";

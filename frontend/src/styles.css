@@ -4,6 +4,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * KaloKoT Design System — warm light mode
+ * Palette: paper (#f5f3ee), ink (#2d2d2d), deep (#0d0d0d), gold (#c9a84c)
+ * Typography: Libre Baskerville (serif), IBM Plex Sans (sans), IBM Plex Mono (mono)
+ * Glass utility, noise grain, radial gold glow
+ */
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -11,6 +18,7 @@
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -32,94 +40,188 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --color-noir: var(--noir);
-  --color-noir-2: var(--noir-2);
+  --color-paper: var(--paper);
+  --color-paper-dark: var(--paper-dark);
+  --color-ink: var(--ink);
+  --color-deep: var(--deep);
   --color-gold: var(--gold);
-  --color-gold-soft: var(--gold-soft);
-  --color-cream: var(--cream);
-  --color-muted-ink: var(--muted-ink);
 
-  --font-display: "Cormorant Garamond", ui-serif, Georgia, serif;
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Libre Baskerville", Georgia, ui-serif, serif;
+  --font-sans: "IBM Plex Sans", system-ui, ui-sans-serif, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
 :root {
-  --radius: 0.75rem;
+  --radius: 0.625rem;
+  --paper: #f5f3ee;
+  --paper-dark: #e8e4dd;
+  --ink: #2d2d2d;
+  --deep: #0d0d0d;
+  --gold: #c9a84c;
 
-  --noir: oklch(0.08 0 0);
-  --noir-2: oklch(0.14 0 0);
-  --gold: oklch(0.98 0 0);
-  --gold-soft: oklch(0.88 0 0);
-  --cream: oklch(0.98 0 0);
-  --muted-ink: oklch(0.72 0 0);
-
-  --background: var(--noir);
-  --foreground: var(--cream);
-  --card: var(--noir-2);
-  --card-foreground: var(--cream);
-  --popover: var(--noir-2);
-  --popover-foreground: var(--cream);
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--ink);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--ink);
   --primary: var(--gold);
-  --primary-foreground: var(--noir);
-  --secondary: oklch(0.20 0 0);
-  --secondary-foreground: var(--cream);
-  --muted: oklch(0.20 0 0);
-  --muted-foreground: var(--muted-ink);
-  --accent: var(--gold-soft);
-  --accent-foreground: var(--noir);
-  --destructive: oklch(0.58 0.22 27);
-  --destructive-foreground: var(--cream);
-  --border: oklch(1 0 0 / 14%);
-  --input: oklch(1 0 0 / 12%);
+  --primary-foreground: var(--paper);
+  --secondary: oklch(0.968 0.007 247.896);
+  --secondary-foreground: var(--ink);
+  --muted: oklch(0.968 0.007 247.896);
+  --muted-foreground: oklch(0.554 0.046 257.417);
+  --accent: var(--gold);
+  --accent-foreground: var(--deep);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --border: oklch(0.929 0.013 255.508);
+  --input: oklch(0.929 0.013 255.508);
   --ring: var(--gold);
 }
-
 
 @layer base {
   * {
     border-color: var(--color-border);
   }
-  html, body, #root {
+  html, body {
     height: 100%;
+    font-family: var(--font-sans);
   }
   body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
-    font-family: var(--font-sans);
+    color: var(--color-ink);
+    background-color: var(--color-paper);
+    background-image:
+      radial-gradient(1100px 700px at 78% 18%, rgba(201, 168, 76, 0.18), transparent 60%),
+      radial-gradient(900px 600px at 12% 88%, rgba(45, 45, 45, 0.08), transparent 65%),
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.18  0 0 0 0 0.18  0 0 0 0.06 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    background-attachment: fixed;
     -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
   }
 }
 
 @utility glass {
-  background: color-mix(in oklab, white 4%, transparent);
+  background: color-mix(in oklab, #f5f3ee 55%, transparent);
   backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid color-mix(in oklab, #2d2d2d 10%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 12px 40px -20px rgba(13, 13, 13, 0.25);
+}
+
+@utility glass-dark {
+  background: color-mix(in oklab, #2d2d2d 40%, transparent);
+  backdrop-filter: blur(24px) saturate(150%);
   border: 1px solid color-mix(in oklab, white 10%, transparent);
   box-shadow:
     inset 0 1px 0 color-mix(in oklab, white 8%, transparent),
-    0 20px 60px -20px color-mix(in oklab, black 80%, transparent),
-    0 0 40px -10px color-mix(in oklab, var(--gold) 18%, transparent);
+    0 20px 60px -20px rgba(0, 0, 0, 0.5);
 }
 
-@utility grain {
-  position: relative;
-  &::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    opacity: 0.08;
-    mix-blend-mode: overlay;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.9'/></svg>");
+@utility pixelated {
+  image-rendering: pixelated;
+}
+
+/* Typography helpers */
+@utility text-kicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: color-mix(in oklab, var(--ink) 50%, transparent);
+}
+
+/* Scrollbar styling */
+@layer base {
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, #2d2d2d 15%, transparent);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, #2d2d2d 25%, transparent);
   }
 }
 
-/* ---------- Hide scrollbar on mobile tab rows ---------- */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+/* Keyframes */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
+@keyframes gold-glow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
 
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes ping-soft {
+  0% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.25); opacity: 0.4; }
+  100% { transform: scale(1); opacity: 0.6; }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.animate-scale-in {
+  animation: scale-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.animate-fade-in {
+  animation: fade-in 0.3s ease both;
+}
+.animate-ping-soft {
+  animation: ping-soft 2s ease-in-out infinite;
+}
+
+/* Staggered delay variants */
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-400 { animation-delay: 0.4s; }
+.delay-500 { animation-delay: 0.5s; }
+
+/* Spring-like interactive transitions */
+.interactive {
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.2s ease,
+              background 0.2s ease,
+              border-color 0.2s ease;
+}
+.interactive:hover {
+  transform: scale(1.03);
+}
+.interactive:active {
+  transform: scale(0.97);
+  transition-duration: 0.06s;
+}
+
+/* Card hover lift */
+.card-hover {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.25s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px -8px rgba(13, 13, 13, 0.2);
+}

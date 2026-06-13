@@ -84,12 +84,13 @@ class TestTenderExtractor:
 # ── TenderParser Tests ────────────────────────────────────────────────────────
 
 
+@pytest.fixture
+def sample_text(extractor, sample_tender_paths):
+    return extractor.from_file(str(sample_tender_paths["water"]))
+
+
 class TestTenderParser:
     """Tests for tender structure parsing."""
-
-    @pytest.fixture
-    def sample_text(self, extractor, sample_tender_paths):
-        return extractor.from_file(str(sample_tender_paths["water"]))
 
     def test_parse_document_returns_tender_document(self, sample_text):
         """Should return a TenderDocument instance."""

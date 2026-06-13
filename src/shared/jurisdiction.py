@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import yaml
 
-from .models import JurisdictionCode, LegalArticle
+from .models import JurisdictionCode
 
 
 LEGAL_DIR = Path(__file__).resolve().parent.parent.parent / "docs" / "legal"
@@ -22,7 +21,11 @@ class JurisdictionLoader:
         self._cache: Dict[str, dict] = {}
 
     def _load(self, code: str) -> dict:
-        """Load a jurisdiction YAML file, cached."""
+        """Load a jurisdiction YAML file, cached.
+
+        Results are cached in memory so repeated lookups for the same
+        jurisdiction don't re-read the file.
+        """
         if code in self._cache:
             return self._cache[code]
 
@@ -31,12 +34,19 @@ class JurisdictionLoader:
             raise FileNotFoundError(f"Legal corpus not found: {path}")
 
         with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
+            try:
+                data = yaml.safe_load(f)
+            except yaml.YAMLError as e:
+                raise ValueError(f"Invalid YAML in {path}: {e}") from e
         self._cache[code] = data
         return data
 
     def list_jurisdictions(self) -> List[dict]:
-        """Return list of available jurisdictions with metadata."""
+        """Return list of available jurisdictions with metadata.
+
+        Scans the legal directory for all *.yaml files and extracts
+        country name and last_reviewed date from each file's meta section.
+        """
         results = []
         for path in sorted(self.legal_dir.glob("*.yaml")):
             data = self._load(path.stem)
@@ -66,10 +76,13 @@ class JurisdictionLoader:
 
     def get_template_by_name(self, jurisdiction: JurisdictionCode,
                              template_name: str) -> Optional[dict]:
-        """Get a specific template by its key name."""
+        """Get a specific template by its template_name key."""
         data = self._load(jurisdiction.value)
-        templates = data.get("templates", {})
-        return templates.get(template_name)
+        templates: list = data.get("templates", [])
+        for t in templates:
+            if t.get("template_name") == template_name:
+                return t
+        return None
 
     def find_matching_red_flags(self, jurisdiction: JurisdictionCode,
                                 risk_report_flagged_ids: List[str]) -> List[dict]:
@@ -89,8 +102,18 @@ class JurisdictionLoader:
                             flagged_ids: Optional[List[str]] = None) -> str:
         """Build a legal context summary string for LLM prompts.
 
-        Includes relevant red flags + their law references.
+        Includes relevant red flags + their law references, oversight
+        bodies, and jurisdiction metadata. This string is injected into
+        the LLM's system prompt so it has grounding in local law.
+
+        Args:
+            jurisdiction: Target legal jurisdiction.
+            flagged_ids: Optional filter — only include matching red flags.
+
+        Returns:
+            Formatted string with jurisdiction details and legal provisions.
         """
+        # Early exit for unknown / unloaded jurisdictions
         if jurisdiction == JurisdictionCode.UNKNOWN:
             return "Jurisdiction not specified. Check user for location."
 
@@ -99,9 +122,11 @@ class JurisdictionLoader:
         except FileNotFoundError:
             return f"Legal corpus for {jurisdiction.value} not yet available."
 
+        # Filter to specific flagged IDs if provided
         if flagged_ids:
             flags = [f for f in flags if f.get("id") in flagged_ids]
 
+        # Build header with jurisdiction metadata
         meta = self.get_meta(jurisdiction)
         lines = [
             f"=== Jurisdiction: {meta.get('country', 'Unknown')} ===",
@@ -119,6 +144,7 @@ class JurisdictionLoader:
             if website:
                 lines.append(f"    Website: {website}")
 
+        # Add each relevant red flag with its law reference details
         lines.append("")
         lines.append("Relevant Legal Provisions:")
 

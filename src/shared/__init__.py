@@ -1,3 +1,10 @@
+"""Shared domain models, utilities, and retrieval components.
+
+This package provides the common data models (tenders, reports, legal articles),
+document chunking and embedding utilities, vector search for legal texts,
+and the ChromaDB-backed legal store used throughout the system.
+"""
+
 from .models import (
     JurisdictionCode, TenderSection, Severity, RiskLevel,
     TenderSectionData, TenderDocument, FlaggedClause,

@@ -1,12 +1,20 @@
-"""Tender document parser — uses LLM to extract structured data from raw text."""
+"""Tender document parser — uses LLM to extract structured data from raw text.
+
+The parser sends raw tender text (from PDF/HTML extraction) to an LLM client
+along with a strict JSON schema, then maps the response into the domain models
+(TenderDocument, TenderSectionData, etc.).
+"""
 
 from __future__ import annotations
 
 from ..shared.models import (
-    TenderDocument, TenderSection, TenderSectionData,
+    TenderDocument,
+    TenderSection,
+    TenderSectionData,
 )
 from ..shared.llm import LLMClient
 
+# ── System prompt for the LLM parser ──────────────────────────────────
 
 PARSER_SYSTEM_PROMPT = """You are a government procurement document parser. Your job is to:
 1. Read a raw tender document (PDF text or HTML)
@@ -23,6 +31,7 @@ Rules:
 
 Respond ONLY with a valid JSON object matching the requested schema."""
 
+# ── JSON schema enforced on the LLM output ────────────────────────────
 
 PARSER_OUTPUT_SCHEMA = {
     "type": "object",
@@ -53,15 +62,35 @@ PARSER_OUTPUT_SCHEMA = {
 
 
 class TenderParser:
-    """Parse tender document text into a structured TenderDocument."""
+    """Parse tender document text into a structured TenderDocument.
+
+    Args:
+        llm: An LLMClient instance used to call the underlying model
+            with structured output (JSON-mode) support.
+    """
 
     def __init__(self, llm: LLMClient):
         self.llm = llm
 
     def parse(self, raw_text: str) -> TenderDocument:
-        """Parse raw tender text into structured document."""
+        """Parse raw tender text into a structured TenderDocument.
+
+        The raw text is sent to the LLM with the parser system prompt and
+        output schema.  The returned JSON is then mapped to domain objects.
+
+        Args:
+            raw_text: The full plain-text content of a tender document
+                (extracted via TenderExtractor).
+
+        Returns:
+            A fully populated TenderDocument with parsed sections.
+        """
+        # Truncate very long documents to avoid exceeding LLM context windows
         if len(raw_text) > 100000:
-            raw_text = raw_text[:100000] + "\n\n[TRUNCATED - document exceeds context limit]"
+            raw_text = (
+                raw_text[:100000]
+                + "\n\n[TRUNCATED - document exceeds context limit]"
+            )
 
         user_prompt = (
             f"Parse the following government tender document:\n\n"
@@ -76,19 +105,22 @@ class TenderParser:
             temperature=0.1,
         )
 
-        # Convert raw sections dicts to TenderSectionData objects
+        # Convert raw section dicts from the LLM to typed TenderSectionData objects
         sections = []
         for s in result.get("sections", []):
             try:
                 section_enum = TenderSection(s.get("section"))
             except ValueError:
+                # Skip sections whose name doesn't match any known TenderSection
                 continue
-            sections.append(TenderSectionData(
-                section=section_enum,
-                heading=s.get("heading", ""),
-                content=s.get("content", ""),
-                page_range=s.get("page_range"),
-            ))
+            sections.append(
+                TenderSectionData(
+                    section=section_enum,
+                    heading=s.get("heading", ""),
+                    content=s.get("content", ""),
+                    page_range=s.get("page_range"),
+                )
+            )
 
         return TenderDocument(
             title=result.get("title", "Untitled Tender"),

@@ -11,12 +11,13 @@ indices, and documented retaliation patterns.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 
-from ..shared.models import JurisdictionCode, Severity
+from ..shared.models import JurisdictionCode
 
 
 class RetaliationRisk(str, Enum):
+    """Enumeration of overall retaliation-risk levels."""
     LOW = "low"
     MODERATE = "moderate"
     HIGH = "high"
@@ -24,6 +25,7 @@ class RetaliationRisk(str, Enum):
 
 
 class AnonymityOption(str, Enum):
+    """Degrees of anonymity available to a whistleblower."""
     NAMED = "named"            # Must reveal identity to file
     PSEUDONYMOUS = "pseudo"    # Can use pseudonym but may be identified
     ANONYMOUS = "anonymous"    # Truly anonymous channels exist
@@ -31,15 +33,23 @@ class AnonymityOption(str, Enum):
 
 
 class WitnessProtection(str, Enum):
+    """Levels of witness-protection available."""
     NONE = "none"
     LIMITED = "limited"        # Basic police protection available
     PROGRAM = "program"        # Formal witness protection program exists
 
 
 class WhistleblowerRiskAssessment:
-    """Assess personal risk for a whistleblower in a given jurisdiction."""
+    """Assess personal risk for a whistleblower in a given jurisdiction.
+
+    Maintains a static dictionary of per-jurisdiction data covering overall
+    risk, anonymity options, witness-protection status, legal protections,
+    recommended reporting channels, retaliation indicators, and precaution
+    steps.  Currently only Nepal (``np``) is populated.
+    """
 
     def __init__(self):
+        # ── Per-jurisdiction risk profiles ─────────────────────────────────
         self._jurisdiction_data: Dict[str, dict] = {
             "np": {
                 "country": "Nepal",
@@ -104,14 +114,31 @@ class WhistleblowerRiskAssessment:
         is_government_employee: bool = False,
         has_evidence_copies: bool = False,
     ) -> dict:
-        """Generate a risk assessment for the given jurisdiction."""
+        """Generate a risk assessment for the given jurisdiction.
+
+        Optionally adjusts overall risk upward for government employees, and
+        appends a critical warning when the user has not secured off-site
+        evidence copies.
+
+        Args:
+            jurisdiction: The jurisdiction to assess.
+            is_government_employee: Whether the whistleblower is a govt employee
+                (elevates risk from HIGH to EXTREME).
+            has_evidence_copies: Whether the user has evidence backed up off-site.
+
+        Returns:
+            A dict with keys: jurisdiction, overall_risk, summary, anonymity,
+            witness_protection, legal_protections, recommended_channels,
+            retaliation_indicators, precaution_steps, and optionally
+            critical_warning.
+        """
         data = self._jurisdiction_data.get(jurisdiction.value)
         if not data:
             return self._unknown_jurisdiction()
 
         overall = data["overall_risk"]
 
-        # Adjust risk for government employees
+        # Government employees face elevated risk in high-risk jurisdictions
         if is_government_employee and overall == RetaliationRisk.HIGH:
             overall = RetaliationRisk.EXTREME
 
@@ -149,7 +176,7 @@ class WhistleblowerRiskAssessment:
         return assessment
 
     def _unknown_jurisdiction(self) -> dict:
-        """Return a generic assessment when jurisdiction is unknown."""
+        """Return a generic conservative assessment when no data exists."""
         return {
             "jurisdiction": "Unknown",
             "overall_risk": RetaliationRisk.HIGH.value,
@@ -193,5 +220,5 @@ class WhistleblowerRiskAssessment:
         }
 
     def list_jurisdictions(self) -> List[str]:
-        """Return list of jurisdictions with risk data."""
+        """Return list of jurisdiction keys that have risk data loaded."""
         return list(self._jurisdiction_data.keys())
