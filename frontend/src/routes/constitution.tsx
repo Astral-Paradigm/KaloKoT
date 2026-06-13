@@ -74,7 +74,7 @@ function ConstitutionPage() {
       <Backdrop />
 
       {/* Top bar */}
-      <header className="relative z-20 flex items-center justify-between px-6 py-4">
+      <header className="relative z-20 flex items-center justify-between px-4 py-3 md:px-6 md:py-4">
         <Link
           to="/"
           className="inline-flex items-center gap-2 text-xs tracking-[0.24em] uppercase transition-colors hover:text-[color:var(--gold)]"
@@ -99,7 +99,7 @@ function ConstitutionPage() {
         </Link>
       </header>
 
-      <div className="relative z-10 mx-auto w-full max-w-5xl px-6 pb-24">
+      <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pb-20 md:px-6 md:pb-24">
         {/* Title */}
         <section className="mb-8 text-center">
           <p

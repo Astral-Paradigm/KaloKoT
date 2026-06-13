@@ -144,7 +144,7 @@ function AnalysisReport() {
       <Backdrop />
 
       {/* Top bar */}
-      <header className="relative z-20 flex items-center justify-between px-8 py-6">
+      <header className="relative z-20 flex items-center justify-between px-4 py-3 md:px-8 md:py-6">
         <Link
           to="/"
           className="inline-flex items-center gap-2 text-xs tracking-[0.24em] uppercase transition-colors hover:text-[color:var(--gold)]"
@@ -162,7 +162,7 @@ function AnalysisReport() {
         <span className="w-16" />
       </header>
 
-      <div className="relative z-10 mx-auto w-full max-w-5xl px-6 pb-24">
+      <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pb-20 md:px-6 md:pb-24">
         {/* Title */}
         <section className="mb-10 text-center">
           <p
@@ -199,8 +199,8 @@ function AnalysisReport() {
           </div>
           <div className="space-y-3">
             {qa.map((item, i) => (
-              <article key={i} className="glass rounded-2xl p-5">
-                <div className="flex items-start justify-between gap-4">
+              <article key={i} className="glass rounded-2xl p-4 md:p-5">
+                <div className="flex items-start justify-between gap-3 md:gap-4">
                   <h3
                     className="text-base font-medium md:text-lg"
                     style={{ color: "var(--cream)" }}
@@ -236,8 +236,8 @@ function AnalysisReport() {
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {pdfFindings.map((f, i) => (
-              <article key={i} className="glass rounded-2xl p-5">
-                <div className="flex items-start justify-between gap-3">
+              <article key={i} className="glass rounded-2xl p-4 md:p-5">
+                <div className="flex items-start justify-between gap-2 md:gap-3">
                   <h3 className="text-sm font-medium" style={{ color: "var(--cream)" }}>
                     {f.title}
                   </h3>
@@ -268,7 +268,7 @@ function AnalysisReport() {
               Evidence checklist
             </h2>
           </div>
-          <div className="glass rounded-2xl p-6">
+          <div className="glass rounded-2xl p-4 md:p-6">
             <ul className="grid gap-3 md:grid-cols-2">
               {evidence.map((e, i) => (
                 <li key={i} className="flex items-start gap-3">
@@ -309,12 +309,12 @@ function AnalysisReport() {
               Export complaint
             </h2>
           </div>
-          <div className="glass rounded-2xl p-6">
+                    <div className="glass rounded-2xl p-4 md:p-6">
             <p
               className="text-sm"
               style={{ color: "var(--muted-ink)" }}
             >
-              A pre-filled complaint addressed to the{" "}
+              A pre-filled complaint addressed to the {" "}
               <span style={{ color: "var(--cream)" }}>
                 Central Vigilance Commission
               </span>{" "}
@@ -326,10 +326,10 @@ function AnalysisReport() {
               references. Review it once before filing.
             </p>
 
-            <div className="mt-5 flex flex-wrap gap-3">
+            <div className="flex flex-col gap-3 md:flex-row md:flex-wrap">
               <button
                 type="button"
-                className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-transform hover:scale-[1.02]"
+                className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-transform hover:scale-[1.02]"
                 style={{
                   background:
                     "linear-gradient(135deg, var(--gold), oklch(0.62 0.13 70))",
@@ -343,7 +343,7 @@ function AnalysisReport() {
               </button>
               <button
                 type="button"
-                className="glass inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-cream transition-all hover:scale-[1.02]"
+                className="glass inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-cream transition-all hover:scale-[1.02]"
                 style={{ color: "var(--cream)" }}
               >
                 <Printer className="h-4 w-4" style={{ color: "var(--gold)" }} />

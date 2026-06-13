@@ -290,13 +290,8 @@ function HomePage() {
 
   return (
     <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        display: "flex",
-        background: "oklch(0.14 0.01 260)",
-        overflow: "hidden",
-      }}
+      className="fixed inset-0 flex flex-col md:flex-row overflow-hidden"
+      style={{ background: "oklch(0.14 0.01 260)" }}
     >
       <Backdrop />
       <link
@@ -304,11 +299,11 @@ function HomePage() {
         rel="stylesheet"
       />
 
-      {/* ── Mascot ── */}
+      {/* ── Mascot (desktop) ── */}
       <div
+        className="hidden md:flex"
         style={{
           flex: "0 0 220px",
-          display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "flex-start",
@@ -331,6 +326,127 @@ function HomePage() {
         </div>
       </div>
 
+      {/* ── Mobile header ── */}
+      <div
+        className="flex md:hidden"
+        style={{
+          alignItems: "center",
+          gap: "8px",
+          padding: "8px 12px",
+          borderBottom: "1px solid oklch(0.2 0.01 260)",
+          position: "relative",
+          zIndex: 2,
+          flexShrink: 0,
+        }}
+      >
+        <LowPolyLawyer />
+        <div
+          style={{
+            fontSize: "10px",
+            color: "oklch(0.72 0.14 85)",
+            letterSpacing: "2px",
+            textTransform: "uppercase",
+            whiteSpace: "nowrap",
+          }}
+        >
+          KaloKoT
+        </div>
+        <div style={{ flex: 1 }} />
+        <div
+          className="no-scrollbar"
+          style={{
+            display: "flex",
+            gap: "3px",
+            overflowX: "auto",
+            flexShrink: 1,
+            minWidth: 0,
+            msOverflowStyle: "none",
+            scrollbarWidth: "none",
+          }}
+        >
+          <button
+            onClick={() => setMode("chat")}
+            style={{
+              padding: "4px 10px",
+              borderRadius: "6px",
+              border: `1px solid ${mode === "chat" ? "oklch(0.72 0.14 85)" : "transparent"}`,
+              background: mode === "chat"
+                ? "color-mix(in oklab, oklch(0.72 0.14 85) 15%, transparent)"
+                : "transparent",
+              color: mode === "chat" ? "oklch(0.88 0.02 80)" : "oklch(0.5 0.02 80)",
+              cursor: "pointer",
+              fontSize: "11px",
+              fontWeight: mode === "chat" ? 600 : 400,
+              transition: "all 0.2s",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            💬 Chat
+          </button>
+          <button
+            onClick={() => setMode("tender")}
+            style={{
+              padding: "4px 10px",
+              borderRadius: "6px",
+              border: `1px solid ${mode === "tender" ? "oklch(0.72 0.14 85)" : "transparent"}`,
+              background: mode === "tender"
+                ? "color-mix(in oklab, oklch(0.72 0.14 85) 15%, transparent)"
+                : "transparent",
+              color: mode === "tender" ? "oklch(0.88 0.02 80)" : "oklch(0.5 0.02 80)",
+              cursor: "pointer",
+              fontSize: "11px",
+              fontWeight: mode === "tender" ? 600 : 400,
+              transition: "all 0.2s",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            📄 Review
+          </button>
+          <button
+            onClick={() => setMode("analysis")}
+            style={{
+              padding: "4px 10px",
+              borderRadius: "6px",
+              border: `1px solid ${mode === "analysis" ? "oklch(0.72 0.14 85)" : "transparent"}`,
+              background: mode === "analysis"
+                ? "color-mix(in oklab, oklch(0.72 0.14 85) 15%, transparent)"
+                : "transparent",
+              color: mode === "analysis" ? "oklch(0.88 0.02 80)" : "oklch(0.5 0.02 80)",
+              cursor: "pointer",
+              fontSize: "11px",
+              fontWeight: mode === "analysis" ? 600 : 400,
+              transition: "all 0.2s",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            📋 Analysis
+          </button>
+          <button
+            onClick={() => setMode("complaint")}
+            style={{
+              padding: "4px 10px",
+              borderRadius: "6px",
+              border: `1px solid ${mode === "complaint" ? "oklch(0.72 0.14 85)" : "transparent"}`,
+              background: mode === "complaint"
+                ? "color-mix(in oklab, oklch(0.72 0.14 85) 15%, transparent)"
+                : "transparent",
+              color: mode === "complaint" ? "oklch(0.88 0.02 80)" : "oklch(0.5 0.02 80)",
+              cursor: "pointer",
+              fontSize: "11px",
+              fontWeight: mode === "complaint" ? 600 : 400,
+              transition: "all 0.2s",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            ⚖️ Complaint
+          </button>
+        </div>
+      </div>
+
       {/* ── Main Panel ── */}
       <div
         style={{
@@ -342,10 +458,10 @@ function HomePage() {
           minWidth: 0,
         }}
       >
-        {/* Mode Tabs */}
+        {/* Mode Tabs (desktop) */}
         <div
+          className="hidden md:flex"
           style={{
-            display: "flex",
             gap: "6px",
             padding: "12px 20px 0",
             borderBottom: "1px solid oklch(0.2 0.01 260)",
@@ -359,10 +475,10 @@ function HomePage() {
 
         {/* ── Content Area ── */}
         <div
+          className="p-4 md:p-[16px_20px]"
           style={{
             flex: 1,
             overflowY: "auto",
-            padding: "16px 20px",
             fontFamily: "Inter, system-ui, sans-serif",
             fontSize: "14px",
             color: "oklch(0.88 0.02 80)",
@@ -401,8 +517,8 @@ function HomePage() {
                     {msg.role === "user" ? "👤" : "⚖️"}
                   </div>
                   <div
+                    className="max-w-[88%] md:max-w-[70%]"
                     style={{
-                      maxWidth: "70%",
                       padding: "10px 14px",
                       borderRadius: "12px",
                       background:
@@ -433,15 +549,14 @@ function HomePage() {
                     {msg.text}
                     {msg.role === "lawyer" && (
                       <button
-                        className="tts-btn"
+                        className="tts-btn md:opacity-0"
                         onClick={() => handleTts(msg.text, i)}
                         disabled={speakingId !== null}
-                        style={{
-                          position: "absolute",
-                          bottom: "-12px",
-                          right: "8px",
-                          opacity: 0,
-                          transition: "opacity 0.2s",
+                          style={{
+                            position: "absolute",
+                            bottom: "-12px",
+                            right: "8px",
+                            transition: "opacity 0.2s",
                           background: "oklch(0.72 0.14 85 / 0.3)",
                           border: "1px solid oklch(0.72 0.14 85 / 0.4)",
                           borderRadius: "6px",
@@ -503,10 +618,10 @@ function HomePage() {
                 <>
                   {/* Upload zone */}
                   <div
+                    className="p-6 md:p-[40px_20px]"
                     style={{
                       border: "2px dashed oklch(0.3 0.02 260)",
                       borderRadius: "12px",
-                      padding: "40px 20px",
                       textAlign: "center",
                       cursor: "pointer",
                       transition: "border-color 0.2s",
@@ -579,6 +694,7 @@ function HomePage() {
                   <button
                     onClick={handleAnalyzeText}
                     disabled={!pasteText.trim()}
+                    className="w-full md:w-auto"
                     style={{
                       padding: "10px 20px",
                       borderRadius: "8px",
@@ -700,9 +816,10 @@ function HomePage() {
                           }}
                         >
                           <div
+                            className="min-w-0 shrink-0"
                             style={{
-                              flex: "0 0 120px",
-                              fontSize: "12px",
+                              flex: "0 0 90px",
+                              fontSize: "11px",
                               color: "oklch(0.7 0.02 80)",
                               textTransform: "capitalize",
                             }}
@@ -712,7 +829,8 @@ function HomePage() {
                           <div
                             style={{
                               flex: 1,
-                              height: "8px",
+                              minWidth: "40px",
+                              height: "6px",
                               borderRadius: "4px",
                               background: "oklch(0.2 0.01 260)",
                               overflow: "hidden",
@@ -736,9 +854,10 @@ function HomePage() {
                             />
                           </div>
                           <div
+                            className="shrink-0"
                             style={{
-                              flex: "0 0 60px",
-                              fontSize: "11px",
+                              flex: "0 0 50px",
+                              fontSize: "10px",
                               fontWeight: 600,
                               color: riskColor(level),
                               textAlign: "right",
@@ -835,6 +954,7 @@ function HomePage() {
                   {/* Discuss with Lawyer */}
                   <button
                     onClick={discussWithLawyer}
+                    className="w-full md:w-auto"
                     style={{
                       padding: "10px 20px",
                       borderRadius: "8px",
@@ -857,6 +977,7 @@ function HomePage() {
                       setUploadedFileName("");
                       setPasteText("");
                     }}
+                    className="w-full md:w-auto"
                     style={{
                       padding: "8px 16px",
                       borderRadius: "8px",
@@ -909,6 +1030,7 @@ function HomePage() {
               <button
                 onClick={handleGenerateAnalysis}
                 disabled={!issueText.trim() || generatingAnalysis}
+                className="w-full md:w-auto"
                 style={{
                   padding: "10px 20px",
                   borderRadius: "8px",
@@ -935,6 +1057,7 @@ function HomePage() {
               {analysisPdf && (
                 <button
                   onClick={handleDownloadAnalysis}
+                  className="w-full md:w-auto"
                   style={{
                     padding: "10px 20px",
                     borderRadius: "8px",
@@ -1027,6 +1150,7 @@ function HomePage() {
               <button
                 onClick={handleDraftComplaint}
                 disabled={!complaintForm.description.trim() || draftingComplaint}
+                className="w-full md:w-auto"
                 style={{
                   padding: "10px 20px",
                   borderRadius: "8px",
@@ -1054,6 +1178,7 @@ function HomePage() {
               {complaintPdf && (
                 <button
                   onClick={handleDownloadComplaint}
+                  className="w-full md:w-auto"
                   style={{
                     padding: "10px 20px",
                     borderRadius: "8px",
@@ -1075,11 +1200,11 @@ function HomePage() {
 
         {/* ── Chat Input Bar (always present) ── */}
         <div
+          className="p-2 md:p-[10px_20px_16px]"
           style={{
-            padding: "10px 20px 16px",
             borderTop: "1px solid oklch(0.2 0.01 260)",
             display: "flex",
-            gap: "8px",
+            gap: "6px",
           }}
         >
           <input
