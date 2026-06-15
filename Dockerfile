@@ -58,9 +58,6 @@ ENV PATH=/home/justice/.local/bin:$PATH \
 WORKDIR /app
 USER justice
 
-EXPOSE 8000
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+EXPOSE 8080
 
 ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]
