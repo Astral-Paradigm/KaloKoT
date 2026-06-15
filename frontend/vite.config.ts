@@ -10,6 +10,13 @@ export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
   },
+  nitro: {
+    preset: "node-server",
+    output: { dir: "dist", serverDir: "dist/server", publicDir: "dist/client" },
+    routeRules: {
+      "/api/**": { proxy: { to: "http://localhost:8000" } },
+    },
+  },
   vite: {
     server: {
       allowedHosts: true,
