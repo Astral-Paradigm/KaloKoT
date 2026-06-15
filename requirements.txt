@@ -31,5 +31,26 @@ chromadb>=1.5.0
 # Sentence embeddings for ChromaDB (pulls torch + transformers)
 sentence-transformers>=3.0.0
 
+# ML framework (explicit — directly imported for Phi model)
+torch>=2.4.0
+transformers>=4.45.0
+
+# API server
+fastapi>=0.115.0
+uvicorn>=0.32.0
+slowapi>=0.1.9
+python-dotenv>=1.0.1
+
+# Data science
+numpy>=1.26.0
+
+# PDF & docx generation
+fpdf2>=2.7.0
+python-docx>=1.1.2
+
+# Date handling (Bikram Sambat + fallback)
+nepali-datetime>=2.0.0
+python-dateutil>=2.9.0
+
 # Dev/testing
 pytest==9.0.3
