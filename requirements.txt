@@ -25,5 +25,11 @@ pydantic==2.13.4
 # Type hints
 typing-extensions==4.15.0
 
+# Vector search (legal RAG)
+chromadb>=1.5.0
+
+# Sentence embeddings for ChromaDB (pulls torch + transformers)
+sentence-transformers>=3.0.0
+
 # Dev/testing
 pytest==9.0.3

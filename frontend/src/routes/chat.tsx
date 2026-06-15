@@ -49,7 +49,7 @@ function ChatPage() {
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [mascotState, setMascotState] = useState<"idle" | "speaking">("idle");
-  const [aiProvider, setAiProvider] = useState("");
+  const [aiProvider, setAiProvider] = useState("rule-based");
 
   // ── Refs ───────────────────────────────────────
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -133,7 +133,7 @@ function ChatPage() {
         {/* AI Provider selector */}
         <div className="flex items-center gap-1.5">
           {[
-            { value: "phi", label: "Phi", note: "🚀" },
+            { value: "rule-based", label: "Default" },
             { value: "", label: "Auto" },
             { value: "gemini", label: "Gemini" },
             { value: "anthropic", label: "Claude" },

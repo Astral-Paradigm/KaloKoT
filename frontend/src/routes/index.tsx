@@ -148,7 +148,7 @@ function HomePage() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [aiProvider, setAiProvider] = useState("");
+  const [aiProvider, setAiProvider] = useState("rule-based");
   const [providersStatus, setProvidersStatus] = useState<ProvidersStatus | null>(null);
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
   const [keyDialogProvider, setKeyDialogProvider] = useState("");
