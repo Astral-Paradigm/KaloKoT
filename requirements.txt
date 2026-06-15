@@ -49,7 +49,7 @@ fpdf2>=2.7.0
 python-docx>=1.1.2
 
 # Date handling (Bikram Sambat + fallback)
-nepali-datetime>=2.0.0
+nepali-datetime>=1.0.8
 python-dateutil>=2.9.0
 
 # Dev/testing
