@@ -52,7 +52,7 @@ ENV PATH=/home/justice/.local/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     LEGAL_DIR=/app/docs/legal \
     LOG_FILE=/logs/justice.log \
-    API_HOST=0.0.0.0 \
+    API_HOST=127.0.0.1 \
     API_PORT=8000
 
 WORKDIR /app
