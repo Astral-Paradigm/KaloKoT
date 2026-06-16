@@ -20,7 +20,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Dict, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Request, UploadFile
 import logging
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
@@ -73,6 +73,8 @@ app = FastAPI(
     description="Procurement corruption risk analyzer and virtual lawyer for public procurement documents.",
     version="1.0.0",
 )
+
+router = APIRouter(prefix="/api")
 
 # ── Rate Limiting ──────────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address)
@@ -257,7 +259,7 @@ async def health():
     return {"status": "ok"}
 
 
-@app.get("/providers", summary="List available LLM providers and their status")
+@router.get("/providers", summary="List available LLM providers and their status")
 async def list_providers():
     """Return status of all LLM providers (configured, Phi loading state)."""
     return {
@@ -270,7 +272,7 @@ async def list_providers():
     }
 
 
-@app.get("/jurisdictions")
+@router.get("/jurisdictions")
 async def list_jurisdictions():
     """List all available legal knowledge base jurisdictions."""
     loader = _get_loader()
@@ -316,7 +318,7 @@ def _validate_image_magic(data: bytes) -> None:
     raise HTTPException(status_code=400, detail="File content does not match image type")
 
 
-@app.post("/analyze", summary="Upload a tender file for analysis")
+@router.post("/analyze", summary="Upload a tender file for analysis")
 @limiter.limit("20/minute")
 async def analyze_file(request: Request, file: UploadFile = File(...)):
     """Upload a tender document (PDF, TXT, HTML, or Image) and get a corruption risk analysis.
@@ -385,7 +387,7 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
     }
 
 
-@app.post("/analyze-text", summary="Submit tender text for analysis")
+@router.post("/analyze-text", summary="Submit tender text for analysis")
 @limiter.limit("30/minute")
 async def analyze_text(request: Request, text: str = Form(...), title: str = Form("Uploaded Tender")):
     """Submit tender document text directly and get a corruption risk analysis."""
@@ -415,7 +417,7 @@ async def analyze_text(request: Request, text: str = Form(...), title: str = For
 
 # ── Report Retrieval ──
 
-@app.get("/report/{report_id}", summary="Get cached analysis report")
+@router.get("/report/{report_id}", summary="Get cached analysis report")
 async def get_report(report_id: str):
     """Retrieve a previously generated report by its ID."""
     if report_id not in _report_cache:
@@ -446,7 +448,7 @@ async def get_report(report_id: str):
 # ── API Key Management ──
 
 
-@app.post("/set-api-key", summary="Store an API key for a provider in the server cache")
+@router.post("/set-api-key", summary="Store an API key for a provider in the server cache")
 @limiter.limit("60/minute")
 async def set_api_key(
     request: Request,
@@ -474,7 +476,7 @@ def _get_llm_with_key(provider: str, api_key: Optional[str] = None) -> LLMClient
 
 # ── Legal Counsel ──
 
-@app.post("/counsel", summary="Ask the Virtual Lawyer a question")
+@router.post("/counsel", summary="Ask the Virtual Lawyer a question")
 @limiter.limit("30/minute")
 async def counsel(
     request: Request,
@@ -556,7 +558,7 @@ async def counsel(
 
 # ── Evidence & Drafting ──
 
-@app.post("/checklist", summary="Generate evidence checklist")
+@router.post("/checklist", summary="Generate evidence checklist")
 @limiter.limit("20/minute")
 async def generate_checklist(request: Request,
                               report_id: str = Form(...),
@@ -573,7 +575,7 @@ async def generate_checklist(request: Request,
     return PlainTextResponse(text)
 
 
-@app.post("/export-draft", summary="Export complaint draft as .txt")
+@router.post("/export-draft", summary="Export complaint draft as .txt")
 @limiter.limit("20/minute")
 async def export_draft(
     request: Request,
@@ -609,7 +611,7 @@ async def export_draft(
 
 # ── Vendor & Risk Assessment ──
 
-@app.post("/vendor-intel", summary="Assess vendor/contractor risk")
+@router.post("/vendor-intel", summary="Assess vendor/contractor risk")
 @limiter.limit("30/minute")
 async def vendor_intelligence(
     request: Request,
@@ -638,7 +640,7 @@ async def vendor_intelligence(
     }
 
 
-@app.post("/risk-assessment")
+@router.post("/risk-assessment")
 @limiter.limit("30/minute")
 async def whistleblower_risk(
     request: Request,
@@ -660,7 +662,7 @@ async def whistleblower_risk(
 
 # ── Legal Knowledge Search ──
 
-@app.post("/legal-search")
+@router.post("/legal-search")
 @limiter.limit("30/minute")
 async def legal_search(
     request: Request,
@@ -693,7 +695,7 @@ async def legal_search(
 
 # ── Constitution (Nepal) Search ──
 
-@app.post("/constitution-search", summary="Search Constitution of Nepal via ChromaDB")
+@router.post("/constitution-search", summary="Search Constitution of Nepal via ChromaDB")
 @limiter.limit("30/minute")
 async def constitution_search(
     request: Request,
@@ -737,7 +739,7 @@ async def constitution_search(
     }
 
 
-@app.get("/constitution-context", response_class=PlainTextResponse)
+@router.get("/constitution-context", response_class=PlainTextResponse)
 @limiter.limit("60/minute")
 async def constitution_context(request: Request):
     """Return the full Constitution of Nepal text for pre-loading into an LLM context window.
@@ -758,7 +760,7 @@ async def constitution_context(request: Request):
 # ── Text-to-Speech ─────────────────────────────────────────────────────────────
 
 
-@app.post("/tts", summary="Convert text to speech (ElevenLabs male voice)")
+@router.post("/tts", summary="Convert text to speech (ElevenLabs male voice)")
 @limiter.limit("10/minute")
 async def text_to_speech(request: Request, text: str = Form(...)):
     """Convert text to speech using ElevenLabs with a deep male voice (Adam)."""
@@ -781,7 +783,7 @@ async def text_to_speech(request: Request, text: str = Form(...)):
 # ── Complaint Drafting ─────────────────────────────────────────────────────────
 
 
-@app.post("/draft-complaint", summary="Draft a formal complaint letter and return PDF")
+@router.post("/draft-complaint", summary="Draft a formal complaint letter and return PDF")
 @limiter.limit("10/minute")
 async def draft_complaint(request: Request, name: str = Form(...),
     permanent_address: str = Form(...),
@@ -939,7 +941,7 @@ async def draft_complaint(request: Request, name: str = Form(...),
 # ── Analysis Report ────────────────────────────────────────────────────────────
 
 
-@app.post("/analysis-report", summary="Generate a legal analysis report and return PDF")
+@router.post("/analysis-report", summary="Generate a legal analysis report and return PDF")
 @limiter.limit("10/minute")
 async def analysis_report(request: Request, issue: str = Form(...),):
     """Generate a legal analysis report based on a described issue, return as PDF.
@@ -999,6 +1001,8 @@ async def analysis_report(request: Request, issue: str = Form(...),):
         headers={"Content-Disposition": f'attachment; filename="legal_analysis_report.pdf"'},
     )
 
+
+app.include_router(router)
 
 # ── CLI Entry Point ───────────────────────────────────────────────────────────
 
