@@ -229,6 +229,10 @@ def _analyze_text(text: str, title: str = "Uploaded Tender") -> RiskReport:
 
 # ── Service Information ──
 
+@app.head("/")
+async def root_head():
+    return ""
+
 @app.get("/")
 async def root():
     """Return API metadata and a directory of all available endpoints."""
