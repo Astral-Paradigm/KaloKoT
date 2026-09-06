@@ -1,12 +1,6 @@
-<div align="center">
-
-![](docs/screenshots/counsel-landing.jpg)
-
 # कालो कोट — KaloKoT
 
 **Digital Counsel** — _the judge who never sleeps, the clerk who never forgets._
-
-</div>
 
 > **Drop in a government tender → get a corruption-risk heatmap. Then go one step further: a Digital Lawyer who tells you exactly which law is being bent, who to report it to, and how.**
 
