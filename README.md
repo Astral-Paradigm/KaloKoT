@@ -1,6 +1,6 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Astral-Paradigm/Justice_system/main/docs/screenshots/counsel-landing.jpg">
-  <img alt="KaloKoT — Digital Counsel" src="https://raw.githubusercontent.com/Astral-Paradigm/Justice_system/main/docs/screenshots/counsel-landing.jpg" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Astral-Paradigm/KaloKoT/main/docs/screenshots/counsel-landing.jpg">
+  <img alt="KaloKoT — Digital Counsel" src="https://raw.githubusercontent.com/Astral-Paradigm/KaloKoT/main/docs/screenshots/counsel-landing.jpg" width="100%">
 </picture>
 
 <div align="center">
